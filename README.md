@@ -95,6 +95,8 @@ with a fresh environment.
 | `scripts\doctor\laptop.ps1`, `scripts\doctor\desktop.ps1` | The machine-specific checks |
 | `docs\SETUP.md` | The shared runbook: pre-wipe backup, apps, apply, restore |
 | `docs\LAPTOP.md`, `docs\DESKTOP.md` | Each machine's BIOS, install, drivers, power and measurements. The desktop's also covers the HDD's ext4-to-NTFS move, Memory Integrity and gaming |
+| `migrate/backup.sh` | Bash, run on CachyOS before the wipe. Puts the working projects' local-only files, their databases and volumes, MCP servers, skills and Claude sessions into one checksummed folder. Reuses `dotfiles-linux`'s `db-backup.sh` and `agents-backup.sh` |
+| `migrate\restore.ps1` | Run on Windows. Verifies that folder, clones the projects into `D:\Code`, restores their data, and puts Claude Code back under the Windows paths |
 
 ## Memory: what replaced each Linux layer
 

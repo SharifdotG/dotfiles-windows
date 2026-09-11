@@ -20,6 +20,7 @@
 mcp-servers.json
 agents-skills.tar.gz
 databases.tsv
+windows-migration/
 
 # Agent instructions, machine-local on purpose (same rule as dotfiles-linux).
 CLAUDE.md

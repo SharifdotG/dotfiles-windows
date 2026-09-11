@@ -20,20 +20,43 @@ Stage 0 is the only one that can't be redone.
 
 ## 0. Before the wipe (on CachyOS)
 
-Everything below exists only on the disk you're about to erase. From the `dotfiles-linux` checkout,
-the existing scripts cover the hard parts:
+Everything below exists only on the disk you're about to erase.
+
+### The one-command backup
+
+From this repo's checkout:
 
 ```bash
-./scripts/db-backup.sh                    # every Postgres database, named volumes, project .env files
-./scripts/agents-backup.sh export         # MCP servers, skills, rules: Claude Code, Codex, Antigravity
+./migrate/backup.sh                       # SocialHousingOSS and structflow by default
 code-insiders --list-extensions > ~/Backup/vscode-extensions.txt
 ```
 
-Then the things no script can do (`dotfiles-linux/docs/MIGRATION.md`, stages 2 and 3):
+Each run writes a new `~/Backup/windows-migration/<timestamp>/`. Where the Linux repo's backup
+scripts already do a job, `backup.sh` runs them:
+
+| Folder | Holds | Made by |
+|---|---|---|
+| `projects/` | Each project's files that git doesn't carry (`.env`, `docker-compose.override.yml`, untracked files), minus rebuildable folders such as `node_modules`; its remote and branch | `git ls-files` |
+| `db/` | Every Postgres database as a `pg_dump`, one per database; the other named volumes as tarballs | `db-backup.sh` |
+| `agents/` | Global MCP servers with their keys, skills, settings, rules, the plugin list | `agents-backup.sh export` |
+| `claude/` | Claude Code transcripts, memory, plans, prompt history and rewind checkpoints; Claude Desktop's Code-tab session list | `tar` |
+| `SHA256SUMS` | A checksum for every file. `restore.ps1` checks them before it changes anything | `sha256sum` |
+
+- It warns about uncommitted edits, unpushed branches and stashes, because those aren't in it. Push
+  them, then run it again.
+- Containers that use a volume stop for a moment while it's copied, then start again.
+- More projects: `-p SocialHousingOSS -p structflow -p <another>`. `-p` replaces the default list.
+- **It holds secrets:** `.env` files and MCP API keys. It's created `0700`; keep it off every repo, and
+  in two places. `~/.claude/.credentials.json` is left out on purpose: you sign in again.
+- If you keep working after it runs, run it again right before the wipe.
+
+### By hand
+
+The rest of `dotfiles-linux/docs/MIGRATION.md`, stages 2 and 3:
 
 - [ ] Push every repo.
-- [ ] In each repo, sweep for gitignored secrets beyond `.env`: `appsettings.Development.json`, dev
-  certs, `*.pfx`, `docker-compose.override.yml`.
+- [ ] In the other repos, sweep for gitignored secrets beyond `.env`: `appsettings.Development.json`,
+  dev certs, `*.pfx`, `docker-compose.override.yml`. `backup.sh` already covers its own projects.
 - [ ] Write down the Brave Sync code (24 words) and your 2FA recovery codes somewhere that isn't
   this machine.
 - [ ] Copy everything to a drive that survives the wipe **as a single tar file**. An exFAT or NTFS
@@ -47,10 +70,37 @@ Then the things no script can do (`dotfiles-linux/docs/MIGRATION.md`, stages 2 a
   tar -cpf "$dest/linux-backup.tar" -C ~ Backup Documents
   tar -tf  "$dest/linux-backup.tar" | head  # prove it reads back
   ```
-- [ ] Make a Windows 11 USB. Writing the ISO with `dd` does not make a bootable Windows stick. Use
-  [Ventoy](https://www.ventoy.net/) and copy the ISO from
-  [microsoft.com/software-download/windows11](https://www.microsoft.com/software-download/windows11)
-  onto it.
+- [ ] Make the Windows 11 USB (next section).
+
+### Windows 11 USB
+
+Writing Microsoft's ISO with `dd` doesn't give a bootable stick, and a plain copy fails too:
+`sources/install.wim` is bigger than FAT32's 4 GB file limit (7.98 GB in the 25H2 ISO), while UEFI
+firmware boots from FAT32. So:
+- Make a FAT32 stick.
+- Split that one file into parts, which Windows Setup reads natively.
+
+It boots with Secure Boot on, using only Microsoft's own boot loader. Use a **16 GB or larger** stick
+and an ISO from [microsoft.com/software-download/windows11](https://www.microsoft.com/software-download/windows11).
+
+```bash
+sudo pacman -S --needed wimlib
+lsblk -o NAME,SIZE,MODEL,TRAN,MOUNTPOINTS         # the stick shows TRAN usb; below it is /dev/sdX
+sudo umount /dev/sdX1 2>/dev/null                  # only if KDE mounted it
+sudo wipefs --all /dev/sdX                         # ERASES the stick - check the letter twice
+sudo parted --script /dev/sdX mklabel gpt mkpart WIN11 fat32 1MiB 100%
+sudo mkfs.fat -F 32 -n WIN11 /dev/sdX1
+sudo mkdir -p /mnt/iso /mnt/usb
+sudo mount -o loop,ro ~/Downloads/<windows-11>.iso /mnt/iso
+sudo mount /dev/sdX1 /mnt/usb
+sudo rsync -r --info=progress2 --exclude=/sources/install.wim /mnt/iso/ /mnt/usb/
+sudo wimlib-imagex split /mnt/iso/sources/install.wim /mnt/usb/sources/install.swm 3800
+ls -lh /mnt/usb/sources/install*.swm               # install.swm, install2.swm, install3.swm
+sync && sudo umount /mnt/usb /mnt/iso              # sync can take minutes on a slow stick
+```
+
+Boot it from the one-time boot menu: **F12** on the ThinkPad, **F11** on the MSI board. Ventoy
+(`ventoy-bin`) works too, but with Secure Boot on, each PC first needs a one-time key enrollment.
 
 ## 1. The machine: BIOS, Windows, drivers, Dev Drive
 
@@ -230,43 +280,60 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
 
 ## 4. Restore
 
-**Projects.** Clone into `D:\Code`. The first clone or push of a private repo opens Git Credential
-Manager's sign-in. Put each project's `.env` files back from the `db-backup.sh` snapshot.
+Before you start:
+- Docker Desktop is running.
+- `claude` has been started once to sign in.
+- The stage 0 backup folder is reachable, on the external drive or copied to `D:\Backup`.
 
-**nopCommerce database (native PostgreSQL).** Newer `pg_restore` versions read dumps made by older
-servers, so the dump from the Linux container restores as-is:
+Then one command, from this repo:
+
+```powershell
+pwsh -File .\migrate\restore.ps1 -Backup E:\windows-migration\<timestamp>
+```
+
+1. **Verify.** Every file is checked against `SHA256SUMS` before anything changes.
+2. **Projects.** SocialHousingOSS and structflow are cloned into `D:\Code` (Git Credential Manager asks
+   you to sign in once), and their local-only files go back in. Files that already exist are left
+   alone.
+3. **Data.** Their Docker volumes and every Postgres database are restored. It asks once first,
+   because this replaces what's in them. Each database server is started on its own and stopped
+   again, since tryton's and structflow's both use port 5432.
+4. **Claude.**
+   - MCP servers are merged into `~\.claude.json`, and `npx` servers get the `cmd /c` wrapper Windows
+     needs.
+   - Skills go into `~\.agents\skills` and are linked into `~\.claude\skills`. Settings and rules are
+     copied.
+   - Transcripts and memory move to their `D:\Code` project names, so `/resume` lists them there.
+   - Claude Desktop's Code-tab list is best effort: its format isn't documented. Any session also
+     resumes with `claude --resume <id>`.
+
+It's safe to re-run, and `-Skip projects,data,claude` leaves steps out. For example, open Claude
+Desktop once and quit it, then run `-Skip projects,data`. Finally, bring each stack up with
+`docker compose up -d` in its folder.
+
+The script doesn't cover:
+- **Plugins:** it prints their names for `/plugin install`.
+- **Codex and Antigravity:** their Linux configs are in the backup's `agents\` folder.
+- **claude.ai connectors:** they ask you to sign in again.
+
+**nopCommerce database (native PostgreSQL).** `backup.sh` dumps the `nop-postgres` container too, to
+`db\<timestamp>\pg\nop-postgres__<database>.dump`. Newer `pg_restore` versions read dumps made by
+older servers, so it restores into the native service as-is:
 
 ```powershell
 pgstart
 $pg = "$env:ProgramFiles\PostgreSQL\18\bin"
 & "$pg\createdb.exe"   -U postgres <database>
-& "$pg\pg_restore.exe" -U postgres -d <database> --no-owner --no-privileges <snapshot>\<database>.dump
+& "$pg\pg_restore.exe" -U postgres -d <database> --no-owner --no-privileges <dump>
 ```
 
-If roles are missing, apply the snapshot's globals file with `psql` first. Point nopCommerce's
+If roles are missing, apply the dump's `.globals.sql` with `psql` first. Point nopCommerce's
 `appsettings.json` connection string at `localhost:5432`.
-
-**Container databases (other projects).** Start only the database service, copy the dump in, and
-restore it:
-
-```powershell
-cd D:\Code\structflow
-docker compose up -d <db-service>
-docker cp <snapshot>\<database>.dump <container>:/tmp/db.dump
-docker exec <container> pg_restore -U <user> -d <database> --clean --if-exists --no-owner --no-privileges /tmp/db.dump
-```
-
-Take `<user>` from the project's `.env`, and the container and database names from the snapshot's
-`databases.tsv`.
 
 **Hot reload in containers.** Services that bind-mount their source (`./app:/app/app` in
 SocialHousingOSS) don't receive file-change events from files on the Windows side. Switch the
 watcher to polling. For uvicorn/watchfiles, add `WATCHFILES_FORCE_POLLING=true` to the service's
 environment.
-
-**Agent config.** Claude Code on Windows reads `%USERPROFILE%\.claude.json` and
-`%USERPROFILE%\.claude\`. Merge `mcpServers` from the export's `mcp-servers.json`, then copy the
-skills in. Any stdio server whose command pointed at a Linux path needs a Windows path instead.
 
 **VS Code extensions.** Install your saved list, plus the PostgreSQL extension:
 
