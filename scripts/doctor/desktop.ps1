@@ -61,6 +61,17 @@ $acOverlay = Get-ItemPropertyValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control
 if ($acOverlay -eq 'ded574b5-45a0-4f42-8737-46345c09c238') { Ok 'power mode: Best performance' }
 else { Info 'power mode is not Best performance - Settings > System > Power > Power mode (docs\DESKTOP.md, Power)' }
 
+# ---- Displays ---------------------------------------------------------------
+Section 'Displays'
+# The Samsung's DisplayPort-to-VGA adapter hides the monitor's own mode list, so
+# 1366x768 may exist only as a custom resolution (docs\DESKTOP.md, Power and displays).
+Add-Type -AssemblyName System.Windows.Forms
+$screens = @([System.Windows.Forms.Screen]::AllScreens | ForEach-Object { "$($_.Bounds.Width)x$($_.Bounds.Height)" })
+foreach ($mode in '1920x1080', '1366x768') {
+    if ($screens -contains $mode) { Ok "a display runs at $mode" }
+    else { Warn "no display at $mode (found: $($screens -join ', ')) - docs\DESKTOP.md, Power and displays" }
+}
+
 # ---- Memory Integrity and WSL -----------------------------------------------
 Section 'Memory Integrity and WSL'
 if ($isAdmin) {
@@ -79,6 +90,26 @@ if (Get-Command wsl.exe -CommandType Application -ErrorAction SilentlyContinue) 
     else                     { Fail "wsl --status exited $LASTEXITCODE - check SVM Mode, then: wsl --install --no-distribution" }
 } else {
     Warn 'wsl.exe not found - Docker Desktop installs WSL on its first start'
+}
+
+# ---- BitLocker --------------------------------------------------------------
+Section 'BitLocker'
+# Off on purpose, set by hand: a BIOS flash or fTPM reset would stop at a
+# recovery-key prompt, and G: holds the only copy of Storage. Reported, never changed.
+if ($isAdmin) {
+    $volumes = @(Get-CimInstance -Namespace 'root\cimv2\Security\MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -ErrorAction SilentlyContinue |
+        Where-Object DriveLetter)
+    # ProtectionStatus 0 = off; ConversionStatus 0 = fully decrypted. "Waiting for
+    # activation" is encrypted with protection off, so both are checked.
+    $encrypted = @(foreach ($v in $volumes) {
+        $conversion = (Invoke-CimMethod -InputObject $v -MethodName GetConversionStatus -ErrorAction SilentlyContinue).ConversionStatus
+        if ($v.ProtectionStatus -ne 0 -or ($null -ne $conversion -and $conversion -ne 0)) { $v.DriveLetter }
+    })
+    if (-not $volumes)  { Warn 'BitLocker status unavailable' }
+    elseif ($encrypted) { foreach ($d in $encrypted) { Warn "$d is encrypted - this machine runs with BitLocker off: manage-bde -off $d (docs\DESKTOP.md, Install)" } }
+    else                { Ok "BitLocker off on $($volumes.DriveLetter -join ', ')" }
+} else {
+    Warn 'BitLocker not checked - Win32_EncryptableVolume needs an elevated terminal'
 }
 
 # ---- GPU tuning -------------------------------------------------------------

@@ -13,7 +13,7 @@ The order:
 1. **Stage 0** here, on CachyOS. On the desktop, DESKTOP.md stage 0 (the HDD) follows straight after.
 2. **Stage 1:** the machine file's BIOS, install and driver stages.
 3. **Stages 2–4** here: apps, apply, restore. The desktop adds its own apps (DESKTOP.md stage 5)
-   after stage 2.
+   after stage 2, and skips `restore.ps1`: it starts fresh.
 4. The rest of the machine file: power, then measure.
 
 Stage 0 is the only one that can't be redone.
@@ -24,11 +24,14 @@ Everything below exists only on the disk you're about to erase.
 
 ### The one-command backup
 
+**The desktop skips `backup.sh`.** Windows starts fresh there, nopCommerce included, and DESKTOP.md
+stage 0 copies the data to the HDD. The extension list (second line) is still worth saving on both.
+
 From this repo's checkout:
 
 ```bash
-./migrate/backup.sh                       # SocialHousingOSS and structflow by default
-code-insiders --list-extensions > ~/Backup/vscode-extensions.txt
+./migrate/backup.sh                       # laptop only: SocialHousingOSS and structflow by default
+mkdir -p ~/Backup && code-insiders --list-extensions > ~/Backup/vscode-extensions.txt
 ```
 
 Each run writes a new `~/Backup/windows-migration/<timestamp>/`. Where the Linux repo's backup
@@ -127,7 +130,6 @@ Updated by the Store. Check that *Store → your profile → Settings → App up
 | Windows Terminal Preview | Then set *Settings → System → For developers → Terminal* to **Windows Terminal Preview** |
 | Microsoft Teams | Kept by `debloat\windows.ps1` on purpose |
 | WhatsApp Beta | A WebView2 wrapper around WhatsApp Web, so it isn't light. Keep its autostart off |
-| ChatGPT | Published by OpenAI |
 | Screenbox Media Player | |
 | Wintoys | Use it for health checks, repairs and cleanup. **Not** its Ultimate Performance or Superfetch toggles, and not its service disabling (README, "Things not to fix") |
 
@@ -135,7 +137,7 @@ Updated by the Store. Check that *Store → your profile → Settings → App up
 
 | Runtime | Source | Notes |
 |---|---|---|
-| Visual C++ v14 Redistributable | [x64](https://aka.ms/vc14/vc_redist.x64.exe) and [x86](https://aka.ms/vc14/vc_redist.x86.exe) permalinks from [Microsoft Learn](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) | Install **both**: the runtime must match each app's architecture, and plenty of apps are still 32-bit |
+| Visual C++ Redistributable Runtimes, all-in-one | [techpowerup.com](https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/) | One run installs every runtime from 2005 to 2022, x86 **and** x64. Apps link against whichever version they were built with, and plenty are still 32-bit. Microsoft's own [permalinks](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist) cover only v14 (2015-2022) |
 | DirectX End-User Runtime | [Microsoft Download Center, id 35](https://www.microsoft.com/download/details.aspx?id=35) | Adds the legacy D3DX9/10/11, XAudio 2.7 and XInput 1.3 libraries some older apps expect. It doesn't change the DirectX version |
 | .NET SDK 9 and 10 | [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download) | Patched through Microsoft Update (stage 1) |
 
@@ -151,6 +153,7 @@ Most of these update themselves from inside the app.
 | Brave | [brave.com/download](https://brave.com/download/) | |
 | Docker Desktop | [docs.docker.com/desktop/setup/install/windows-install](https://docs.docker.com/desktop/setup/install/windows-install/) | Use the WSL 2 backend. **Licence:** free only for personal use, or for employers under 250 staff and under $10M revenue. Don't start it until stage 3 step 4 |
 | Claude Desktop | [claude.ai/download](https://claude.ai/download) | |
+| ChatGPT | [openai.com/chatgpt/download](https://openai.com/chatgpt/download/) | Updates itself, so it doesn't need the Store |
 | Antigravity 2.0 | [antigravity.google/download](https://antigravity.google/download) | |
 | Gemini | [gemini.google/desktop](https://gemini.google/desktop) | It uses Alt+Space to open over any window. Keep its autostart off unless you use that shortcut daily |
 | Zed Preview | [zed.dev/download/preview](https://zed.dev/download/preview) | Downloads updates in the background and applies them on restart |
@@ -177,6 +180,7 @@ you'd rather not pipe it.
 |---|---|---|
 | CaskaydiaCove Nerd Font | [nerdfonts.com/font-downloads](https://www.nerdfonts.com/font-downloads) → *CascadiaCode* | Select every `.ttf`, then *Install for all users* |
 | Starship | [github.com/starship/starship/releases](https://github.com/starship/starship/releases) | `starship-x86_64-pc-windows-msvc.msi` |
+| GitHub CLI | [github.com/cli/cli/releases](https://github.com/cli/cli/releases) | `gh_<version>_windows_amd64.msi`. Then sign in once with `gh auth login` |
 | bat, eza, fd, ripgrep, fzf | [bat](https://github.com/sharkdp/bat/releases) · [eza](https://github.com/eza-community/eza/releases) · [fd](https://github.com/sharkdp/fd/releases) · [ripgrep](https://github.com/BurntSushi/ripgrep/releases) · [fzf](https://github.com/junegunn/fzf/releases) | Download the Windows x64 zips and put the `.exe` files in `%LOCALAPPDATA%\Programs\bin`. `install.ps1` creates that folder and adds it to PATH |
 | Node.js LTS | [nodejs.org](https://nodejs.org/) | |
 | pnpm | [pnpm.io/installation](https://pnpm.io/installation) | Use the PowerShell installer; update with `pnpm self-update` |
@@ -276,9 +280,13 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
 7. **Power.** [LAPTOP.md stage 3](LAPTOP.md#3-power) or [DESKTOP.md stage 6](DESKTOP.md#6-power-and-displays).
    Both keep the Balanced plan; neither uses Ultimate Performance.
 8. **Check.** Run `pwsh -File .\scripts\doctor.ps1`, then run it again from an elevated terminal to
-   get the compression, Dev Drive and (on the desktop) Memory Integrity checks.
+   get the compression, Dev Drive and Secure Boot checks, plus Memory Integrity and BitLocker on the
+   desktop.
 
 ## 4. Restore
+
+**On the desktop, skip `restore.ps1`:** it has no `backup.sh` folder, and nopCommerce starts from an
+empty database. The notes after the script (hot reload, VS Code extensions) still apply.
 
 Before you start:
 - Docker Desktop is running.

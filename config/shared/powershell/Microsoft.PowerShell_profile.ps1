@@ -11,11 +11,17 @@
 Set-PSReadLineOption -EditMode Windows
 Set-PSReadLineOption -HistoryNoDuplicates
 Set-PSReadLineOption -HistorySearchCursorMovesToEnd
+Set-PSReadLineOption -MaximumHistoryCount 10000   # oh-my-zsh's SAVEHIST
+Set-PSReadLineOption -BellStyle None              # zsh does not beep at an ambiguous Tab
 Set-PSReadLineOption -PredictionSource History
 Set-PSReadLineOption -PredictionViewStyle ListView
 Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
 Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
+# zsh-autosuggestions' grey inline hint is PredictionViewStyle InlineView; F2
+# switches between it and the list above, so both are one key away. Ctrl+D on an
+# empty line exits the shell, as in zsh.
+Set-PSReadLineKeyHandler -Key Ctrl+d    -Function DeleteCharOrExit
 
 # Catppuccin Latte - the same hexes as the Linux zsh-syntax-highlighting theme,
 # turned into 24-bit escape sequences.
@@ -38,6 +44,83 @@ Set-PSReadLineOption -Colors @{
     ListPredictionSelected = "`e[48;2;204;208;218m"   # surface0 background
 }
 Remove-Variable fg
+
+# ---- Completion for external tools --------------------------------------------
+# The zsh side had oh-my-zsh's git, docker and docker-compose plugins plus
+# zsh-completions. PowerShell completes its own cmdlets and parameters already;
+# every external tool needs a generated script instead.
+#
+# Generating them at startup would cost one process launch per tool per tab, so
+# each script is written once into completions\ next to this file and rebuilt
+# only when the tool's .exe is newer than the cached script - which is what makes
+# an upgrade pick itself up. Delete the folder to force a rebuild.
+#
+# NB: npm generates for bash only and pnpm for bash, zsh and fish, so there is
+# nothing to cache for either. Docker does emit a PowerShell script, despite its
+# docs listing only the three Unix shells.
+$completionDir = Join-Path $PSScriptRoot 'completions'
+foreach ($entry in @(
+        @{ Tool = 'gh';       Arguments = @('completion', '-s', 'powershell') }
+        @{ Tool = 'docker';   Arguments = @('completion', 'powershell') }
+        @{ Tool = 'rg';       Arguments = @('--generate', 'complete-powershell') }
+        @{ Tool = 'fd';       Arguments = @('--gen-completions', 'powershell') }
+        @{ Tool = 'bat';      Arguments = @('--completion', 'ps1') }
+        @{ Tool = 'starship'; Arguments = @('completions', 'powershell') }
+    )) {
+    $exe = Get-Command $entry.Tool -CommandType Application -ErrorAction Ignore | Select-Object -First 1
+    if (-not $exe) { continue }
+    $cached = Join-Path $completionDir "$($entry.Tool).ps1"
+    if (-not (Test-Path $cached) -or (Get-Item $cached).LastWriteTime -lt (Get-Item $exe.Source).LastWriteTime) {
+        $null = New-Item -ItemType Directory -Force -Path $completionDir
+        $arguments = $entry.Arguments
+        $generated = & $exe.Source @arguments 2>$null
+        # An empty or failed generation must not leave a stale or truncated file
+        # behind: the next shell would dot-source it and report a parse error.
+        if ($LASTEXITCODE -eq 0 -and $generated) {
+            $generated | Set-Content -LiteralPath $cached -Encoding utf8
+        } else {
+            Remove-Item -LiteralPath $cached -ErrorAction Ignore
+            continue
+        }
+    }
+    # A cached script that is newer than the exe is never regenerated, so a
+    # damaged one - a half-written file after a crash - would greet every new
+    # shell with a parse error. Dropping it here means the next shell rebuilds it.
+    try { . $cached } catch { Remove-Item -LiteralPath $cached -ErrorAction Ignore }
+}
+Remove-Variable completionDir, entry, exe, cached, arguments, generated -ErrorAction Ignore
+
+# The dotnet CLI needs no cached script: this shim asks `dotnet complete` at the
+# moment you press Tab, which also covers project-specific values. Microsoft's
+# own snippet (learn.microsoft.com/dotnet/core/tools/enable-tab-autocomplete).
+if (Get-Command dotnet -CommandType Application -ErrorAction Ignore) {
+    Register-ArgumentCompleter -Native -CommandName dotnet -ScriptBlock {
+        param($wordToComplete, $commandAst, $cursorPosition)
+        dotnet complete --position $cursorPosition "$commandAst" | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    }
+}
+
+# git ships no PowerShell completion at all, and posh-git is a module, which this
+# file doesn't take. This covers what the oh-my-zsh git plugin was actually used
+# for: the subcommand, then branch names for the commands that take one. Both
+# lists come from git itself, and only when Tab is pressed.
+if (Get-Command git -CommandType Application -ErrorAction Ignore) {
+    Register-ArgumentCompleter -Native -CommandName git -ScriptBlock {
+        param($wordToComplete, $commandAst, $cursorPosition)
+        $typed = @($commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { "$_" })
+        $verb  = $typed | Where-Object { $_ -notlike '-*' } | Select-Object -First 1
+        $items = if (-not $verb -or $verb -eq $wordToComplete) {
+            git --list-cmds=main,nohelpers 2>$null
+        } elseif ($verb -in 'checkout', 'switch', 'merge', 'rebase', 'branch', 'cherry-pick', 'log', 'diff', 'pull', 'push') {
+            git for-each-ref --format='%(refname:short)' refs/heads refs/remotes 2>$null
+        }
+        $items | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+        }
+    }
+}
 
 # ---- Prompt -------------------------------------------------------------------
 # starship.toml is the Linux file unchanged, at %USERPROFILE%\.config\starship.toml

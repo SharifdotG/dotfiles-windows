@@ -1,10 +1,14 @@
 # Desktop: Ryzen 5 3600 + RX 570
 
 MSI B450M Mortar MAX · Ryzen 5 3600 (6 cores, 12 threads, Zen 2) · Sapphire Radeon RX 570 8 GB
-(Polaris) · 16 GB DDR4-2400 · Samsung 970 EVO 500 GB NVMe · Seagate 1 TB 2.5" **5400 RPM** HDD ·
-450 W PSU · Realtek RTL8111H ethernet.
-**Displays:** Esonic 22ELMW 1920×1080 (right, primary) and Samsung S19F350 1366×768 (left), both at
-100%, no FreeSync.
+(Polaris) · 16 GB DDR4-2400 (two different 8 GB sticks) · 512 GB NVMe · Seagate 1 TB 2.5"
+**5400 RPM** HDD · 450 W PSU · Realtek RTL8111H ethernet · a USB audio dongle as the speaker and mic.
+**The NVMe isn't a Samsung.** Its firmware calls it *Samsung SSD 970 EVO Plus 500GB*, but the
+controller is a DRAM-less MAXIO MAP1202 (PCI `1e4b:1202`), and it holds 512 GB rather than Samsung's
+500. Samsung's tools don't apply to it (stage 3).
+**Displays:** Esonic 22ELMW 1920×1080 on HDMI (right, primary) and Samsung S19F350 1366×768 (left),
+both at 100%, no FreeSync. The Samsung is VGA-only, so it hangs off an active DisplayPort-to-VGA
+adapter (stage 6).
 
 Everything the laptop has, plus games and creative work. The memory rules don't change, because this
 machine also has 16 GB. Games get their RAM by stopping the dev stack first (`gameprep`), not by
@@ -45,6 +49,13 @@ manifests on both sides, and nothing is destroyed until they match. Close Steam 
    ```
 
    Below, `/dev/sdX` is that disk, and `/dev/sdXN` is its partition, number `N`.
+
+   The copy lands on the NVMe first, so check that drive too. *Critical Warning* should be `0x00` and
+   *Media and Data Integrity Errors* `0`:
+
+   ```bash
+   sudo smartctl -a /dev/nvme0 | grep -E 'Critical Warning|Media and Data Integrity|Percentage Used'
+   ```
 2. **Find names Windows can't use**, while the HDD is still writable. ext4 allows names that Windows
    refuses, so rename anything these print:
    - the characters `\ : * ? " < > |`
@@ -75,18 +86,19 @@ manifests on both sides, and nothing is destroyed until they match. Close Steam 
    for an ext4 disk that no longer exists.
 
    ```bash
-   sudo pacman -S --needed ntfs-3g              # provides mkfs.ntfs
+   sudo pacman -S --needed ntfsprogs            # mkfs.ntfs; the ntfs-3g package no longer has it
    sudo umount /mnt/games
    sudoedit /etc/fstab                          # delete the /mnt/games line
    sudo systemctl daemon-reload
    sudo mkfs.ntfs --fast --label Storage /dev/sdXN
    ```
 
-   Windows only gives a drive letter to a *Microsoft basic data* partition, and this one is still
-   typed *Linux filesystem*. `sfdisk` comes with util-linux:
+   Windows only gives a drive letter to a *Microsoft basic data* partition. This disk once held
+   Windows, so check the type before changing it: on CachyOS it already showed `ebd0a0a2-…`, and then
+   there's nothing to do. `sfdisk` comes with util-linux:
 
    ```bash
-   lsblk -no PTTYPE /dev/sdX                    # gpt or dos
+   lsblk -o NAME,PTTYPE,PARTTYPE /dev/sdX       # ebd0a0a2-... (gpt) or 0x7 (dos): already right, skip the rest
    sudo sfdisk --part-type /dev/sdX N EBD0A0A2-B9E5-4433-87C0-68B6B72699C7   # if gpt
    sudo sfdisk --part-type /dev/sdX N 7                                      # if dos
    ```
@@ -110,12 +122,12 @@ manifests on both sides, and nothing is destroyed until they match. Close Steam 
 
 | Setting | Value | Why |
 |---|---|---|
-| **M-Flash** (do this first) | The latest BIOS from the [MSI support page](https://www.msi.com/Motherboard/B450M-MORTAR-MAX/support), on a FAT32 USB stick | Newer AGESA fixes the AMD fTPM stutter Windows can hit (fixed from AGESA 1.2.0.7). A flash resets every setting, so the rows below come after it |
-| OC → DRAM Setting → A-XMP | **Profile 1** | Without it the DDR4-2400 kit runs at 2133. `doctor.ps1` checks the speed |
+| **M-Flash** (do this first) | The latest BIOS from the [MSI support page](https://www.msi.com/Motherboard/B450M-MORTAR-MAX/support), on a FAT32 USB stick | The board runs 2.J0 (2023), already past the fTPM stutter fix (AGESA 1.2.0.7). Later AGESAs add security fixes such as Sinkclose; read the notes on MSI's page. A flash resets every setting, so the rows below come after it. If POST then offers to reset the fTPM, say yes: nothing is stored in it before Windows |
+| OC → DRAM Setting → A-XMP | **Profile 1**, if offered | CachyOS showed both sticks at 2400. If A-XMP isn't offered after the flash, they're JEDEC 2400 sticks and need nothing. `doctor.ps1` checks the speed |
 | OC → CPU Features → SVM Mode | **Enabled** | AMD virtualization. Docker Desktop's VM needs it |
 | Settings → Advanced → Integrated Peripherals → SATA Mode | AHCI | Never RAID |
 | Settings → Advanced → Windows OS Configuration → BIOS UEFI/CSM Mode | UEFI | Windows 11 requires it |
-| Settings → Advanced → Windows OS Configuration → Secure Boot | **Enabled** (Standard) | Windows 11 requires it. The Linux setup had it off |
+| Settings → Advanced → Windows OS Configuration → Secure Boot | **Enabled** (Standard) | Windows 11 requires it. The Linux setup had it off. The keys are already enrolled, Microsoft's 2023 certificates included; if the flash cleared them, use *Restore Factory Keys*. `doctor.ps1` checks for the 2023 certificate |
 | Settings → Security → Trusted Computing → AMD fTPM switch | **AMD CPU fTPM** | TPM 2.0 for Windows 11 |
 | Settings → Advanced → Wake Up Event Setup | Wake from USB off | Otherwise a mouse nudge wakes the PC |
 
@@ -123,15 +135,30 @@ manifests on both sides, and nothing is destroyed until they match. Close Steam 
 
 1. **Unplug the HDD's SATA data cable.** It holds the only copy of `Storage`. Windows Setup can't
    touch a disk it can't see. Install over ethernet.
-2. **Partitions.** Delete every partition on the NVMe. Create the Windows partition at about
-   **390 GB** (`399360` MB in Setup) and leave the rest **unallocated**, roughly 75 GB, for the Dev
-   Drive.
-3. **Windows Update.** Run it until nothing is left. In *Advanced options*, turn on **Receive updates
+2. **Partitions.** Delete every partition on the NVMe. Create the Windows partition at **400 GB**
+   (`409600` MB in Setup) and leave the rest **unallocated**, roughly 77 GB, for the Dev Drive. Setup
+   shows the whole disk as 476.9 GB: it's a 512 GB drive, not a 500 GB Samsung.
+3. **Local account.** At the Microsoft account screen, press Shift+F10, run `start ms-cxh:localonly`
+   and create the account in the window that opens. Microsoft is closing this route, so newer media
+   may ignore it. If so, sign in with a Microsoft account and carry on: step 4 still applies.
+4. **BitLocker off.** Windows 11 can turn on device encryption by itself during setup. This machine
+   runs without it: a BIOS flash or fTPM reset would stop at a recovery-key prompt, and the HDD must
+   never end up encrypted. From an elevated terminal:
+
+   ```powershell
+   manage-bde -status
+   ```
+
+   Every volume should show *Fully Decrypted* and *Protection Off*. If one doesn't, turn it off in
+   *Settings → Privacy & security → Device encryption* (or *Control Panel → BitLocker Drive
+   Encryption*), or run `manage-bde -off C:`. Decryption runs in the background: wait until
+   `manage-bde -status` shows *Fully Decrypted* before step 6. `doctor.ps1` warns if it comes back.
+5. **Windows Update.** Run it until nothing is left. In *Advanced options*, turn on **Receive updates
    for other Microsoft products**. Drivers come in stage 3.
-4. **Plug the HDD back in** (shut down first). It gets the next free letter, which would be D:. Open
+6. **Plug the HDD back in** (shut down first). It gets the next free letter, which would be D:. Open
    *Disk Management* (`diskmgmt.msc`), right-click the *Storage* volume → *Change Drive Letter and
    Paths* → **G:**. Do this before the Dev Drive, so D: stays free for it.
-5. **Dev Drive.** Go to *Settings → System → Storage → Advanced storage settings → Disks & volumes*,
+7. **Dev Drive.** Go to *Settings → System → Storage → Advanced storage settings → Disks & volumes*,
    select the NVMe's *Unallocated* space, and choose **Create Dev Drive**. Use letter `D:` and label
    `Dev`. It's trusted when created, so Defender runs in performance mode on it.
 
@@ -147,7 +174,8 @@ vendors' own.
    → *Driver*, Windows 11 64-bit:
    - **AMD Chipset Driver**, first: Ryzen power management and the PSP/fTPM drivers
    - **Realtek LAN** (RTL8111H)
-   - **Realtek HD Audio**
+   - **Realtek HD Audio**, only if you use the board's own audio jacks. The speaker and mic are a USB
+     dongle, which needs no driver; set it as the default in *Settings → System → Sound*.
 
    Skip *MSI Center*, the *Driver Utility Installer* and the other utilities. Each adds a service
    that runs all day.
@@ -168,6 +196,9 @@ vendors' own.
 on top: two tools writing the same settings undo each other, and `doctor.ps1` warns if either shows
 up. The same goes for PowerPlay table edits and modded drivers. On Linux, forcing `amdgpu.ppfeaturemask`
 for this kind of control caused trouble and was removed.
+
+**The NVMe.** It isn't a Samsung (see the top of this file), so skip Samsung Magician, Samsung's NVMe
+driver and its firmware updates. Windows' own NVMe driver is the right one.
 
 ## 4. Memory Integrity off
 
@@ -244,9 +275,23 @@ In *Settings → Apps → Startup*, turn off Steam, Epic Games Launcher, SKLaunc
 removes the Power mode slider and keeps cores out of their idle states, which buys heat and fan
 noise rather than frames. `tune.ps1` has already turned hibernation off; sleep still works.
 
-**Displays.** In *Settings → System → Display*, click *Identify* and arrange them: the 1366×768 on the
-left, the 1920×1080 on the right. Select the right one and choose *Make this my main display*. Set
-both to **100%**.
+**Displays.** The Samsung comes first. Its DisplayPort-to-VGA adapter can't read the monitor, so it
+hands Windows a stand-in list of modes with no 1366×768 in it (on CachyOS a custom mode covered
+this). If *Settings → System → Display → Display resolution* doesn't offer 1366×768 for it:
+
+1. In AMD Software, open *Settings → Display → Custom Resolutions*, create **1366×768 at 60 Hz** with
+   the standard timing, and pick it in Windows' display settings.
+2. If AMD Software refuses it, add the same mode with [CRU](https://www.monitortests.com/forum/Thread-Custom-Resolution-Utility-CRU)
+   and run its `restart64.exe`.
+3. Last resort: 1360×768, six pixels short.
+
+An HDMI-to-VGA adapter doesn't fix this by itself; it has the same problem. What does fix it is the
+monitor's own list getting through: a VGA cable with every pin (the list travels on pins 12 and 15),
+or an adapter that passes it on.
+
+Then click *Identify* and arrange them: the 1366×768 on the left, the 1920×1080 on the right. Select
+the right one and choose *Make this my main display*. Set both to **100%**. `doctor.ps1` checks that
+both resolutions are in use.
 
 ## 7. Gaming notes
 

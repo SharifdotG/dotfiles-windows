@@ -5,7 +5,8 @@
 
 .DESCRIPTION
     Changes nothing. Run it normally, and once from an elevated terminal too -
-    Get-MMAgent and the Dev Drive trust query need admin and are skipped otherwise.
+    Get-MMAgent, the Dev Drive trust query and the Secure Boot checks need admin
+    and are skipped otherwise.
     Exits 1 when any check fails.
 
     It checks live state rather than config files: on Linux a setting that every
@@ -127,7 +128,7 @@ if ($cache -and $isAdmin) {
 
 # ---- Tools ------------------------------------------------------------------
 Section 'Tools on PATH'
-foreach ($tool in 'git', 'starship', 'eza', 'bat', 'fd', 'rg', 'fzf', 'node', 'pnpm', 'dotnet', 'python', 'docker', 'code-insiders', 'claude', 'codex', 'agy') {
+foreach ($tool in 'git', 'gh', 'starship', 'eza', 'bat', 'fd', 'rg', 'fzf', 'node', 'pnpm', 'dotnet', 'python', 'docker', 'code-insiders', 'claude', 'codex', 'agy') {
     $cmd = Get-Command $tool -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($cmd) { Ok "$tool  $($cmd.Source)" } else { Warn "$tool not found - see the app checklist in docs\SETUP.md" }
 }
@@ -256,9 +257,31 @@ foreach ($name in $startup) {
     }
 }
 
+# ---- Secure Boot ------------------------------------------------------------
+Section 'Secure Boot'
+if ($isAdmin) {
+    # Windows PowerShell's SecureBoot module, asked through powershell.exe for the
+    # same reason as the Appx query above. A BIOS flash can reset the key store to
+    # its defaults and drop the 2023 certificate newer boot media is signed with.
+    $secureBoot = @(powershell.exe -NoProfile -Command @'
+try { if (Confirm-SecureBootUEFI) { 'on' } else { 'off' } } catch { 'unsupported' }
+try { if ([Text.Encoding]::ASCII.GetString((Get-SecureBootUEFI -Name db).Bytes) -match 'Windows UEFI CA 2023') { 'ca2023' } } catch { }
+'@ 2>$null)
+    if ($secureBoot -contains 'on') {
+        Ok 'Secure Boot on'
+        if ($secureBoot -contains 'ca2023') { Ok 'Secure Boot db holds the Windows UEFI CA 2023' }
+        else { Warn 'Secure Boot db lacks the Windows UEFI CA 2023 - Windows Update adds it; boot media signed with it will not start until then' }
+    } else {
+        $state = if ($secureBoot -contains 'off') { 'off' } else { 'unsupported or unreadable' }
+        Fail "Secure Boot is $state - BIOS (docs\$($machine.Name.ToUpper()).md, BIOS)"
+    }
+} else {
+    Warn 'Secure Boot not checked - Confirm-SecureBootUEFI needs an elevated terminal'
+}
+
 # ---- This machine only ------------------------------------------------------
-# Laptop: sleep states and power modes. Desktop: RAM speed, the HDD, Memory
-# Integrity, WSL and GPU tuning.
+# Laptop: sleep states and power modes. Desktop: RAM speed, the HDD, displays,
+# Memory Integrity, WSL, BitLocker and GPU tuning.
 . (Join-Path $PSScriptRoot "doctor\$($machine.Name).ps1")
 
 # ---- Graphics ---------------------------------------------------------------

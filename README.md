@@ -9,7 +9,7 @@ PostgreSQL, and a browser at the same time.
 | CPU | i5-8365U (4 cores, 15 W) | Ryzen 5 3600 (6 cores, 65 W) |
 | GPU | Intel UHD 620 | Radeon RX 570 8 GB (Polaris) |
 | RAM | 16 GB, **soldered** | 16 GB DDR4-2400 |
-| Storage | 238 GB NVMe | 500 GB NVMe + 1 TB HDD as `G:` |
+| Storage | 238 GB NVMe | 512 GB NVMe + 1 TB HDD as `G:` |
 | On top of the shared setup | Sleep-state and battery tuning | Games, recording and creative apps |
 | Runbook | [docs/LAPTOP.md](docs/LAPTOP.md) | [docs/DESKTOP.md](docs/DESKTOP.md) |
 
@@ -73,7 +73,7 @@ with a fresh environment.
 | `install.ps1` | Every file in `config\shared\targets.ps1`, env vars, PATH, git identity | — | `gameprep` (`profile.d\machine.ps1`) |
 | `debloat\windows.ps1` | Apps and settings | `-DisableModernStandbyNetworking` | — |
 | `tune.ps1` | Compression, SysMain, pagefile, long paths, crash dumps, PostgreSQL Manual | Sleep-state guide | Hibernation off; reports Memory Integrity, Game Mode and the power plan |
-| `doctor.ps1` | Everything above, and where the RAM is | Sleep states, power plan, AC/DC power modes | RAM speed, SVM, the `G:` HDD, hibernation, power plan, Memory Integrity, WSL, one GPU tuner; startup and memory rows for Steam, Epic, SKLauncher, Recordly, Affinity, OBS, Adrenalin |
+| `doctor.ps1` | Everything above, Secure Boot and its 2023 certificate, and where the RAM is | Sleep states, power plan, AC/DC power modes | RAM speed, SVM, the `G:` HDD, hibernation, power plan, display resolutions, Memory Integrity, WSL, BitLocker off, one GPU tuner; startup and memory rows for Steam, Epic, SKLauncher, Recordly, Affinity, OBS, Adrenalin |
 
 ## What's here
 
@@ -95,7 +95,7 @@ with a fresh environment.
 | `scripts\doctor\laptop.ps1`, `scripts\doctor\desktop.ps1` | The machine-specific checks |
 | `docs\SETUP.md` | The shared runbook: pre-wipe backup, apps, apply, restore |
 | `docs\LAPTOP.md`, `docs\DESKTOP.md` | Each machine's BIOS, install, drivers, power and measurements. The desktop's also covers the HDD's ext4-to-NTFS move, Memory Integrity and gaming |
-| `migrate/backup.sh` | Bash, run on CachyOS before the wipe. Puts the working projects' local-only files, their databases and volumes, MCP servers, skills and Claude sessions into one checksummed folder. Reuses `dotfiles-linux`'s `db-backup.sh` and `agents-backup.sh` |
+| `migrate/backup.sh` | Bash, run on the laptop's CachyOS before the wipe (the desktop starts fresh). Puts the working projects' local-only files, their databases and volumes, MCP servers, skills and Claude sessions into one checksummed folder. Reuses `dotfiles-linux`'s `db-backup.sh` and `agents-backup.sh` |
 | `migrate\restore.ps1` | Run on Windows. Verifies that folder, clones the projects into `D:\Code`, restores their data, and puts Claude Code back under the Windows paths |
 
 ## Memory: what replaced each Linux layer
@@ -158,6 +158,9 @@ a ceiling, not a reservation. If the stack you actually run needs more, raise it
   only copy of that data.
 - **Don't script Memory Integrity, and don't turn it off on the laptop.** Turning it off is a
   manual, desktop-only choice (DESKTOP stage 4). The scripts only report it.
+- **Don't let BitLocker stay on on the desktop.** Windows 11 can switch device encryption on during
+  setup. It's turned off by hand (DESKTOP stage 2), so a BIOS flash never stops at a recovery-key
+  prompt and `G:` is never encrypted. `doctor.ps1` reports it and doesn't change it.
 - **Don't use a hostname to pick the profile.** See "How the two machines are told apart".
 
 ## Things that write over your files

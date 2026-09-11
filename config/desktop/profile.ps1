@@ -1,5 +1,6 @@
 # Desktop profile: MSI B450M Mortar MAX, Ryzen 5 3600, Radeon RX 570 8 GB,
-# 16 GB DDR4-2400, 970 EVO 500 GB NVMe, 1 TB HDD as G:. Everything the laptop
+# 16 GB DDR4-2400, 512 GB NVMe (a MAXIO drive whose firmware claims to be a
+# Samsung), 1 TB HDD as G:. Everything the laptop
 # has, plus games and creative apps. Get-DotfilesConfig (lib\profile.ps1) adds
 # this to config\shared\targets.ps1. Data only: no param block, nothing that runs.
 
