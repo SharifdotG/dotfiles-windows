@@ -316,9 +316,9 @@ The script doesn't cover:
 - **Codex and Antigravity:** their Linux configs are in the backup's `agents\` folder.
 - **claude.ai connectors:** they ask you to sign in again.
 
-**nopCommerce database (native PostgreSQL).** `backup.sh` dumps the `nop-postgres` container too, to
-`db\<timestamp>\pg\nop-postgres__<database>.dump`. Newer `pg_restore` versions read dumps made by
-older servers, so it restores into the native service as-is:
+**nopCommerce database (native PostgreSQL).** Nothing is carried over for it, so it starts empty. To
+load a dump made elsewhere, such as a `pg_dump -Fc` from a Postgres container, use the native tools.
+Newer `pg_restore` versions read dumps made by older servers, so it restores as-is:
 
 ```powershell
 pgstart
