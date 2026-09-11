@@ -1,0 +1,43 @@
+# %USERPROFILE%\.wslconfig - copied into place by install.ps1.
+#
+# There is no Linux distro to work in on either machine. The only thing running
+# in WSL is Docker Desktop's VM, so every setting below is about that VM's memory
+# and disk. Changes take effect after `wsl --shutdown` (Docker Desktop restarts
+# the VM on its own).
+
+[wsl2]
+# Ceiling for the whole container VM - a limit, not a reservation; the VM only
+# takes what the containers actually use.
+#
+# 4GB because native builds (Node, Nx, .NET) now run on Windows and compete for
+# the same 16 GB - on both machines, and soldered on the laptop. On the desktop,
+# `gameprep` shuts the VM down before a game. A runaway compose stack
+# hits this wall and is OOM-killed inside the VM instead of pushing Windows into
+# the pagefile - the same idea as `capped()` in the Linux zshrc.
+#
+# If the stack you really run needs more, raise it and re-measure with
+# scripts\doctor.ps1 - don't guess. Starting only the services you need
+# (`docker compose up -d postgres keycloak`) is usually the better fix.
+memory=4GB
+
+# The VM has no zram, so this swap is a file on disk. Keep it small: it is a
+# cushion for spikes, not a place for a working set to live.
+swap=2GB
+
+# WSLg - the Wayland/X11 stack for Linux GUI apps, run in its own system distro.
+# Nothing here needs Linux GUI apps.
+guiApplications=false
+
+[experimental]
+# Hand page cache back to Windows when the VM goes idle, instead of holding it
+# after an image build. Docker's WSL docs recommend this; Docker Desktop's
+# Resource Saver pauses the engine but does NOT reduce memory on WSL.
+#
+# NB: dropCache, NOT gradual. gradual is known to hang with systemd and to
+# conflict with Docker Desktop's Resource Saver.
+autoMemoryReclaim=dropCache
+
+# Virtual disks created from now on shrink when space is freed inside them - on
+# the laptop's 238 GB drive that matters. Put this file in place before Docker Desktop's
+# first start, so its disk is created sparse.
+sparseVhd=true

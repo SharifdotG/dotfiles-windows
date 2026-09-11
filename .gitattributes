@@ -1,0 +1,21 @@
+# Everything is LF, in the index and in the working tree, on every OS.
+#
+# This repo is written on Linux and applied on Windows. PowerShell 7, Windows
+# Terminal, VS Code, git and Docker Desktop all read LF files without complaint,
+# so CRLF buys nothing - while Git for Windows' installer default
+# (core.autocrlf=true) would rewrite every file on checkout and turn the first
+# commit made from the other OS into a whole-repo diff.
+#
+# NB: keep the .ps1 files ASCII. Anything that ends up in Windows PowerShell 5.1
+# (powershell.exe) reads a UTF-8 file without a BOM in the ANSI code page, so a
+# single em dash or curly quote becomes mojibake - or a parse error when it lands
+# inside a string.
+* text=auto eol=lf
+
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.ttf   binary
+*.otf   binary
+
+docs/*.md linguist-documentation

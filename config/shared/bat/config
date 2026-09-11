@@ -1,0 +1,15 @@
+# bat configuration - %APPDATA%\bat\config on Windows; install.ps1 puts it there.
+# The profile's `cat` runs `bat --paging=never`; --paging here makes plain `bat`
+# behave the same way.
+--paging=never
+--style=numbers,changes,header
+
+# NB: pinned, NOT --theme=auto. `auto` asks the terminal for its background over
+# OSC 11, and when that query cannot be answered - a pipe, a non-TTY - bat
+# silently falls back to its built-in Monokai Extended and ignores
+# --theme-light/--theme-dark entirely (verified on the Linux machine). Windows
+# Terminal is pinned to the Catppuccin Latte scheme, so the background is a known
+# light colour and there is nothing to switch between.
+#
+# bat has bundled Catppuccin since 0.24: no .tmTheme to ship, no cache rebuild.
+--theme="Catppuccin Latte"

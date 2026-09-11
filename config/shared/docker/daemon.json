@@ -1,0 +1,21 @@
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" },
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "policy": [
+        {
+          "keepDuration": "48h",
+          "maxUsedSpace": "2GB",
+          "filter": ["type=source.local,type=exec.cachemount,type=source.git.checkout"]
+        },
+        { "maxUsedSpace": "10GB" },
+        { "maxUsedSpace": "10GB", "all": true }
+      ]
+    }
+  },
+  "default-ulimits": {
+    "nofile": { "Name": "nofile", "Soft": 65536, "Hard": 65536 }
+  }
+}

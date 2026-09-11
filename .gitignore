@@ -1,0 +1,25 @@
+# The Linux dotfiles this repo was ported from. They have their own repo; the
+# copy in this folder is only here to read while working on the Windows side.
+/dotfiles-linux/
+
+# install.ps1 writes <file>.bak-<timestamp> next to anything it replaces. Those
+# land outside the repo; this is the guard if a target ever points inside it.
+*.bak-*
+
+# Never commit secrets or machine-local state
+.ssh/
+*.key
+*_rsa
+*_ed25519
+.npmrc
+*.age
+
+# Backup output from the pre-wipe scripts. They write to ~/Backup by default;
+# this is the guard for the day someone passes -o . by mistake.
+*.dump
+mcp-servers.json
+agents-skills.tar.gz
+databases.tsv
+
+# Agent instructions, machine-local on purpose (same rule as dotfiles-linux).
+CLAUDE.md

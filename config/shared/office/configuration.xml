@@ -1,0 +1,40 @@
+<!--
+  Office Deployment Tool configuration: Microsoft 365 Apps for enterprise with Word,
+  Excel and PowerPoint only. Every other app is excluded, including OneNote,
+  OneDrive, both Outlooks and the bundled Teams (Teams comes from the Microsoft Store).
+
+  1. Download the Office Deployment Tool (Microsoft Download Center, id 49117):
+         https://www.microsoft.com/download/details.aspx?id=49117
+     Run it and extract it to a folder.
+  2. In an elevated terminal, from that folder:
+         .\setup.exe /configure <repo>\config\shared\office\configuration.xml
+  3. Open Word and sign in with the work or school account that holds the
+     Microsoft 365 Apps licence.
+
+  To change the app selection later, edit the ExcludeApp lines and run the same
+  command again. When the languages here match the installed ones, this list
+  replaces the previous selection. config.office.com builds the same kind of file
+  in a browser.
+-->
+<Configuration>
+  <Add OfficeClientEdition="64" Channel="Current">
+    <Product ID="O365ProPlusRetail">
+      <Language ID="MatchOS" Fallback="en-us" />
+      <!-- Word, Excel and PowerPoint are the only apps not listed below. -->
+      <ExcludeApp ID="Access" />
+      <!-- OneDrive under both IDs: the sync app, and the one the docs call Groove -->
+      <ExcludeApp ID="Groove" />
+      <ExcludeApp ID="OneDrive" />
+      <ExcludeApp ID="Lync" />
+      <ExcludeApp ID="OneNote" />
+      <ExcludeApp ID="Outlook" />
+      <ExcludeApp ID="OutlookForWindows" />
+      <ExcludeApp ID="Publisher" />
+      <ExcludeApp ID="Teams" />
+    </Product>
+  </Add>
+  <!-- Current Channel: monthly feature and security updates, applied in the background. -->
+  <Updates Enabled="TRUE" Channel="Current" />
+  <!-- Normal installer UI, and the licence terms are shown for you to accept. -->
+  <Display Level="Full" AcceptEULA="FALSE" />
+</Configuration>
