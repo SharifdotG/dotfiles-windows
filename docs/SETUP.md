@@ -13,7 +13,7 @@ The order:
 1. **Stage 0** here, on CachyOS. On the desktop, DESKTOP.md stage 0 (the HDD) follows straight after.
 2. **Stage 1:** the machine file's BIOS, install and driver stages.
 3. **Stages 2–4** here: apps, apply, restore. The desktop adds its own apps (DESKTOP.md stage 5)
-   after stage 2, and skips `restore.ps1`: it starts fresh.
+   after stage 2. Both machines run `restore.ps1`, from the same backup folder.
 4. The rest of the machine file: power, then measure.
 
 Stage 0 is the only one that can't be redone.
@@ -24,14 +24,17 @@ Everything below exists only on the disk you're about to erase.
 
 ### The one-command backup
 
-**The desktop skips `backup.sh`.** Windows starts fresh there, nopCommerce included, and DESKTOP.md
-stage 0 copies the data to the HDD.
+**Run `backup.sh` once, on the laptop.** The desktop doesn't need its own: stage 4 restores the same
+projects on it from the laptop's folder. Its personal data goes to the HDD in DESKTOP.md stage 0.
 
-From this repo's checkout:
+From this repo's checkout, naming each project folder under `~/Documents/Code`:
 
 ```bash
-./migrate/backup.sh                       # laptop only: SocialHousingOSS and structflow by default
+./migrate/backup.sh -p <project> -p <another-project>   # laptop only
 ```
+
+There is deliberately no default list. This repo is public, so project names stay on the command
+line and out of the files.
 
 Each run writes a new `~/Backup/windows-migration/<timestamp>/`. Where the Linux repo's backup
 scripts already do a job, `backup.sh` runs them:
@@ -47,7 +50,8 @@ scripts already do a job, `backup.sh` runs them:
 - It warns about uncommitted edits, unpushed branches and stashes, because those aren't in it. Push
   them, then run it again.
 - Containers that use a volume stop for a moment while it's copied, then start again.
-- More projects: `-p SocialHousingOSS -p structflow -p <another>`. `-p` replaces the default list.
+- At least one `-p` is required. The names are recorded in the folder's `manifest.json` and
+  `projects\projects.tsv`, which is all `restore.ps1` reads.
 - **It holds secrets:** `.env` files and MCP API keys. It's created `0700`; keep it off every repo, and
   in two places. `~/.claude/.credentials.json` is left out on purpose: you sign in again.
 - If you keep working after it runs, run it again right before the wipe.
@@ -109,8 +113,16 @@ Boot it from the one-time boot menu: **F12** on the ThinkPad, **F11** on the MSI
 - **Laptop:** [LAPTOP.md](LAPTOP.md), stages 1–2.
 - **Desktop:** [DESKTOP.md](DESKTOP.md), stages 1–4.
 
-Both end with a `D:` Dev Drive of about 75 GB, created before any app is installed. Projects, package
-caches and the PostgreSQL data all go there.
+Both end with a Dev Drive of about 75 GB, created before any app is installed. Projects, package
+caches and the PostgreSQL data all go there. **Its letter differs:**
+
+| Machine | Dev Drive | Projects | PostgreSQL data |
+|---|---|---|---|
+| Laptop | `D:` | `D:\Code` | `D:\PostgreSQL\18\Data` |
+| Desktop | `E:` | `E:\Code` | `E:\PostgreSQL\18\Data` |
+
+The commands below show the laptop's `D:`. On the desktop, type `E:` instead. No script assumes a
+letter: `install.ps1 -DevDrive` records it, and `doctor.ps1` and `restore.ps1` read it from there.
 
 ## 2. Apps
 
@@ -277,7 +289,7 @@ stopped.
    matter here — which components, and where the data lives — are only offered by this installer.
 2. **Components:** tick *PostgreSQL Server* and *Command Line Tools*. Untick *pgAdmin 4* and *Stack
    Builder*. Queries and browsing go through the VS Code PostgreSQL extension, `ms-ossdata.vscode-pgsql`.
-3. **Data Directory:** `D:\PostgreSQL\18\Data`, on the Dev Drive. (The installer offers
+3. **Data Directory:** `D:\PostgreSQL\18\Data` (desktop: `E:\PostgreSQL\18\Data`), on the Dev Drive. (The installer offers
    `C:\Program Files\PostgreSQL\18\data` — change it. Substitute your major version for `18` here
    and in every command below.)
 4. **Password.** The installer asks for a password for the `postgres` superuser. Write it down: every
@@ -286,8 +298,8 @@ stopped.
    fine. Let it finish, then come back after stage 3 — `tune.ps1` has to set the service to Manual
    first.
 
-   Why 5434: the restored project stacks already publish Postgres containers on the host —
-   `tryton-postgres-1` on **5432** and `structflow-postgres-1` on **5433**. Two servers cannot share
+   Why 5434: the restored project stacks already publish Postgres containers on the host, one on
+   **5432** and another on **5433**. Two servers cannot share
    a port, and the way this fails is genuinely nasty: the native service cannot bind, so it stays
    stopped, and `psql -U postgres` on `localhost:5432` then reaches the *container's* database
    instead. Same host, same port, different server — and the only symptom is
@@ -311,7 +323,7 @@ this runbook they are not a script to hand to `pwsh -File`, for two reasons:
   `$env:ProgramFiles` *before* the inner `pwsh` ever sees the string, so the inner shell is handed
   an already-empty variable and fails with ``The term '\psql.exe' is not recognized``.
 
-**First, the port.** Edit `D:\PostgreSQL\18\Data\postgresql.conf`, change `port = 5432` to
+**First, the port.** Edit `D:\PostgreSQL\18\Data\postgresql.conf` (desktop: `E:\…`), change `port = 5432` to
 `port = 5434`, and save. It is writable without elevation. This is the one setting that cannot go
 through `tuning.sql`: `ALTER SYSTEM` needs a connection, and there is no connection until the server
 can bind a port.
@@ -345,11 +357,11 @@ file itself explains what each of the five settings is for and which ones need t
 
 ### Desktop wallpaper
 
-Nothing to do by hand — `install.ps1` sets it. `config\shared\wallpaper\wallpaper.png` is copied to
-`%LOCALAPPDATA%\dotfiles\wallpaper.png` and Windows is pointed at that copy, with *Fill* (style 10),
-which crops to the display's aspect ratio instead of stretching. The image is 3840×2160 — 16:9, like
-both machines' panels — and it is a small centred mark on a flat field, so nothing of interest sits
-near an edge that a crop could reach.
+Nothing to do by hand — `install.ps1` sets it. `config\shared\wallpaper\wallpaper.jpg` is copied to
+`%LOCALAPPDATA%\dotfiles\wallpaper.jpg` and Windows is pointed at that copy, with *Fill* (style 10),
+which crops to the display's aspect ratio instead of stretching. The image is 2752×1536, a 1.792
+ratio against the panels' 16:9 (1.778), so Fill trims under 1% of the width — about 11 px a side at
+1920×1080 — and it stays above both machines' resolutions, so it is only ever scaled down.
 
 It is deliberately **not** left inside the repo checkout: Windows re-reads the file at every
 sign-in, so a path in a folder you might move or delete would eventually leave you with a black
@@ -357,9 +369,11 @@ desktop. `install.ps1` writes the three `HKCU:\Control Panel\Desktop` values and
 `SystemParametersInfo`, which is what makes the change appear immediately rather than at the next
 sign-in. `doctor.ps1` reports it if *Personalization → Background* later points somewhere else.
 
-To change it, replace `config\shared\wallpaper\wallpaper.png` and re-run `install.ps1`. A different
+To change it, replace `config\shared\wallpaper\wallpaper.jpg` and re-run `install.ps1`. A different
 file extension means editing the two `wallpaper.` lines in `config\shared\targets.ps1` as well, since
-the copied file keeps its name.
+the copied file keeps its name. Save a `.jpeg` as `.jpg` — same format, and only `*.jpg` is marked
+binary in `.gitattributes`. `install.ps1` never deletes a file it no longer manages, so remove the old
+copy from `%LOCALAPPDATA%\dotfiles\` by hand.
 
 ### Mouse cursor: Cursor Concept 3 (free)
 
@@ -376,7 +390,8 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
 
 ## 3. Apply
 
-1. **Get the repo.** Clone it with `git clone`, for example into `D:\Code\dotfiles-windows`. A zip
+1. **Get the repo.** Clone it with `git clone`, for example into `D:\Code\dotfiles-windows` (desktop:
+   `E:\Code\dotfiles-windows`). A zip
    downloaded through a browser carries Mark-of-the-Web, and PowerShell refuses to run its scripts;
    `Get-ChildItem -Recurse | Unblock-File` fixes that.
 2. **Run the scripts.** Do this after installing Microsoft 365 and PostgreSQL, so the OneDrive
@@ -385,7 +400,7 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
    ```powershell
    pwsh -File .\debloat\windows.ps1       # restore point, then Win11Debloat, silently (keeps Teams)
    pwsh -File .\tune.ps1
-   pwsh -File .\install.ps1 -DevDrive D:  # may ask for your git name and email - see below
+   pwsh -File .\install.ps1 -DevDrive D:  # desktop: -DevDrive E:. May ask for your git name and email - see below
    Restart-Computer
    ```
 
@@ -430,13 +445,23 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
 
 ## 4. Restore
 
-**On the desktop, skip `restore.ps1`:** it has no `backup.sh` folder, and nopCommerce starts from an
-empty database. The notes after the script (hot reload, the nopCommerce database) still apply.
+**Both machines run it, from the same folder** — the one `backup.sh` wrote on the laptop in stage 0.
+On the desktop, copy that `<timestamp>` folder over first (to `G:`, say — not inside `E:\Code`).
+Every file is checked against `SHA256SUMS`, so a bad copy stops it before anything changes.
+
+Two things to know on the desktop:
+- **The data is as old as the backup.** Volumes and databases come back as they were on CachyOS,
+  not as they are on the laptop today. If the laptop's are newer and you'd rather not have the old
+  ones, add `-Skip data`: the projects then start with empty databases.
+- **Nothing to pass for the Dev Drive.** `-CodeRoot` defaults to `Code` on the drive `install.ps1
+  -DevDrive E:` recorded, so `E:\Code`. It stops before changing anything if it can't tell, or if a
+  `-CodeRoot` you pass is on a drive the machine doesn't have.
 
 Before you start:
+- `install.ps1 -DevDrive` has run (stage 3), so the Dev Drive's letter is known.
 - Docker Desktop is running.
 - `claude` has been started once to sign in.
-- The stage 0 backup folder is reachable, on the external drive or copied to `D:\Backup`.
+- The stage 0 backup folder is reachable: on the external drive, or copied onto the machine.
 - **Each git remote has been signed into once**, so the clones don't stop halfway. See below.
 
 ### Git credentials, once per host
@@ -450,16 +475,19 @@ What that means per host:
 | Host | First time | After that |
 |---|---|---|
 | GitHub | GCM opens a browser window and you approve it. GitHub Desktop does this on its own, so if you signed into it there is usually nothing left to do | Silent |
-| A self-hosted Gitea, such as `internal-git.siderian.cloud` | GCM has no browser sign-in for Gitea — it is not one of the four hosts it knows (GitHub, GitLab, Bitbucket, Azure DevOps). It shows a plain username/password box instead. Use a **Gitea access token** as the password (*Gitea → Settings → Applications → Generate New Token*, scope `read:repository`), not your account password | Silent |
+| A self-hosted Gitea | GCM has no browser sign-in for Gitea — it is not one of the four hosts it knows (GitHub, GitLab, Bitbucket, Azure DevOps). It shows a plain username/password box instead. Use a **Gitea access token** as the password (*Gitea → Settings → Applications → Generate New Token*, scope `read:repository`), not your account password | Silent |
 
 So the sign-in is a one-time cost per host on a fresh Windows install, and the reason it did not
 happen on the previous install is simply that Windows Credential Manager already held the entry.
 
-Get it out of the way before the restore, so nothing blocks in the middle of it:
+Get it out of the way before the restore, so nothing blocks in the middle of it. This asks every
+remote the backup recorded, so no URL has to be typed — or kept in this repo:
 
 ```powershell
-git ls-remote https://internal-git.siderian.cloud/SocialHousingOSS/SocialHousingOSS.git   # prompts once
-cmdkey /list | Select-String siderian                                                     # proves it stuck
+$backup = '<where you copied it>\<timestamp>'
+Get-Content "$backup\projects\projects.tsv" | Where-Object { $_ -and $_ -notlike '#*' } |
+    ForEach-Object { git ls-remote ($_ -split "`t")[1] HEAD }     # prompts once per new host
+cmdkey /list | Select-String git:                                  # proves it stuck
 ```
 
 Then the restore runs unattended.
@@ -467,22 +495,24 @@ Then the restore runs unattended.
 Then one command, from this repo:
 
 ```powershell
-pwsh -File .\migrate\restore.ps1 -Backup E:\windows-migration\<timestamp>
+pwsh -File .\migrate\restore.ps1 -Backup $backup
 ```
 
 1. **Verify.** Every file is checked against `SHA256SUMS` before anything changes.
-2. **Projects.** SocialHousingOSS and structflow are cloned into `D:\Code`, on the branch
-   `backup.sh` recorded, and their local-only files go back in. Files that already exist are left
-   alone. Git Credential Manager prompts here if you skipped the step above.
+2. **Projects.** Each project in the backup is cloned into `Code` on the Dev Drive (`D:\Code`,
+   `E:\Code` on the desktop), on the branch `backup.sh` recorded, and its local-only files go back
+   in. Files that already exist are left alone. Git Credential Manager prompts here if you skipped
+   the step above.
 3. **Data.** Their Docker volumes and every Postgres database are restored. It asks once first,
    because this replaces what's in them. Each database server is started on its own and stopped
-   again, since tryton's and structflow's both use port 5432.
+   again, since two projects' servers can publish the same port.
 4. **Claude.**
    - MCP servers are merged into `~\.claude.json`, and `npx` servers get the `cmd /c` wrapper Windows
      needs.
    - Skills go into `~\.agents\skills` and are linked into `~\.claude\skills`. Settings and rules are
      copied.
-   - Transcripts and memory move to their `D:\Code` project names, so `/resume` lists them there.
+   - Transcripts and memory move to their `D:\Code` (or `E:\Code`) project names, so `/resume` lists
+     them there.
    - Claude Desktop's Code-tab list is best effort: its format isn't documented. Any session also
      resumes with `claude --resume <id>`.
 
@@ -511,11 +541,11 @@ $pg = "$env:ProgramFiles\PostgreSQL\18\bin"
 ```
 
 If roles are missing, apply the dump's `.globals.sql` with `psql` first. Point nopCommerce's
-`appsettings.json` connection string at **`localhost:5434`** — not 5432, which belongs to the tryton
-container (see the PostgreSQL section in stage 2).
+`appsettings.json` connection string at **`localhost:5434`** — not 5432, which belongs to a project's
+Postgres container (see the PostgreSQL section in stage 2).
 
-**Hot reload in containers.** Services that bind-mount their source (`./app:/app/app` in
-SocialHousingOSS) don't receive file-change events from files on the Windows side. Switch the
+**Hot reload in containers.** Services that bind-mount their source (`./app:/app/app`, say) don't
+receive file-change events from files on the Windows side. Switch the
 watcher to polling. For uvicorn/watchfiles, add `WATCHFILES_FORCE_POLLING=true` to the service's
 environment.
 

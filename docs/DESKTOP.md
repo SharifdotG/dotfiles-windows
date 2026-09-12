@@ -155,12 +155,17 @@ manifests on both sides, and nothing is destroyed until they match. Close Steam 
    `manage-bde -status` shows *Fully Decrypted* before step 6. `doctor.ps1` warns if it comes back.
 5. **Windows Update.** Run it until nothing is left. In *Advanced options*, turn on **Receive updates
    for other Microsoft products**. Drivers come in stage 3.
-6. **Plug the HDD back in** (shut down first). It gets the next free letter, which would be D:. Open
-   *Disk Management* (`diskmgmt.msc`), right-click the *Storage* volume → *Change Drive Letter and
-   Paths* → **G:**. Do this before the Dev Drive, so D: stays free for it.
+6. **Plug the HDD back in** (shut down first). It gets the next free letter. Open *Disk Management*
+   (`diskmgmt.msc`), right-click the *Storage* volume → *Change Drive Letter and Paths* → **G:**.
 7. **Dev Drive.** Go to *Settings → System → Storage → Advanced storage settings → Disks & volumes*,
-   select the NVMe's *Unallocated* space, and choose **Create Dev Drive**. Use letter `D:` and label
-   `Dev`. It's trusted when created, so Defender runs in performance mode on it.
+   select the NVMe's *Unallocated* space, and choose **Create Dev Drive**. Use letter **`E:`** and
+   label `Dev`. It's trusted when created, so Defender runs in performance mode on it.
+
+   **This is the one letter that differs from the laptop, whose Dev Drive is `D:`.** Wherever
+   SETUP.md shows both, use `E:`: `install.ps1 -DevDrive E:`, `E:\Code` for the projects and
+   `E:\PostgreSQL\18\Data`. The scripts never assume a letter. `install.ps1` records the one you pass,
+   `doctor.ps1` checks whichever drive the caches and PostgreSQL's data directory are on, and
+   `restore.ps1` puts the projects in `Code` on the Dev Drive `install.ps1` recorded.
 
 Games don't go on the Dev Drive: it's sized for code, package caches and PostgreSQL. Every library
 goes on G: (stage 5).

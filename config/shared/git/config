@@ -27,7 +27,7 @@
 	# (autocrlf=true) checks shell scripts out with CRLF, and a script that is
 	# bind-mounted or COPY'd into a Linux container then dies with
 	#     $'\r': command not found
-	# SocialHousingOSS/logging bind-mounts ./setup-kibana.sh exactly like that.
+	# A compose stack that bind-mounts its own setup script is exactly that case.
 	# A repo that really wants CRLF says so in its own .gitattributes.
 	autocrlf = false
 	# node_modules trees routinely pass the 260-character MAX_PATH. tune.ps1

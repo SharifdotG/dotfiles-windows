@@ -36,8 +36,9 @@ usage: migrate/backup.sh [-o DIR] [-p PROJECT]...
 
   -o, --out DIR        parent folder (default ~/Backup/windows-migration). Each run
                        creates a new timestamped folder inside it.
-  -p, --project NAME   a folder under ~/Documents/Code. Repeatable, and replaces the
-                       default list: SocialHousingOSS and structflow.
+  -p, --project NAME   a folder under ~/Documents/Code. Required, and repeatable:
+                       -p first-project -p second-project. There is no default
+                       list, so no project names live in this public repo.
 
 Environment: DOTFILES_LINUX (default ~/dotfiles), CODE_ROOT (default ~/Documents/Code)
 EOS
@@ -51,7 +52,7 @@ while [ $# -gt 0 ]; do
     *)            printf 'unknown argument: %s\n' "$1" >&2; usage 1 ;;
   esac
 done
-[ "${#PROJECTS[@]}" -gt 0 ] || PROJECTS=(SocialHousingOSS structflow)
+[ "${#PROJECTS[@]}" -gt 0 ] || { printf 'name at least one project with -p\n' >&2; usage 1; }
 
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 ok()   { printf '    \033[32mok\033[0m    %s\n' "$*"; }
@@ -139,7 +140,7 @@ ok "$(find "$HOME/.claude/projects" -name '*.jsonl' 2>/dev/null | wc -l) transcr
 
 # ---- 6. manifest and checksums ------------------------------------------------
 say "Manifest and checksums"
-# restore.ps1 maps every path under codeRoot to the same path under D:\Code.
+# restore.ps1 maps every path under codeRoot to the same path under <Dev Drive>:\Code.
 jq -n --arg taken "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg home "$HOME" --arg codeRoot "$CODE_ROOT" \
   '{taken: $taken, home: $home, codeRoot: $codeRoot, projects: $ARGS.positional}' \
   --args "${PROJECTS[@]}" > "$OUT/manifest.json" || warn "could not write manifest.json"

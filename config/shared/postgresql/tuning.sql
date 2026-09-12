@@ -17,8 +17,8 @@
 
 -- NB: the listening port is NOT set here. ALTER SYSTEM needs a connection, and
 -- there is no connection until the server can bind a port - so `port` lives in
--- postgresql.conf. It is 5434 on both machines, because the tryton and
--- structflow containers publish 5432 and 5433 (docs\SETUP.md, PostgreSQL).
+-- postgresql.conf. It is 5434 on both machines, because the restored projects'
+-- Postgres containers publish 5432 and 5433 (docs\SETUP.md, PostgreSQL).
 ALTER SYSTEM SET shared_buffers = '256MB';        -- default 128MB; restart needed
 ALTER SYSTEM SET work_mem = '8MB';                -- default 4MB
 ALTER SYSTEM SET maintenance_work_mem = '64MB';   -- the default, pinned

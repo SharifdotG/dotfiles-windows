@@ -9,9 +9,10 @@
     saved as <file>.bak-<timestamp> before it is replaced, so nothing is lost.
 
 .PARAMETER DevDrive
-    Letter of a Dev Drive, e.g. D:. The npm, NuGet and pip caches are pointed at
-    <letter>:\packages so package restores run on ReFS, with Defender in
-    performance mode, instead of paying real-time scanning on C:.
+    Letter of the Dev Drive: D: on the laptop, E: on the desktop. The npm,
+    NuGet and pip caches are pointed at <letter>:\packages so package restores
+    run on ReFS, with Defender in performance mode, instead of paying real-time
+    scanning on C:.
 
 .PARAMETER MachineProfile
     -Profile laptop or -Profile desktop. Normally omitted: lib\profile.ps1 reads
@@ -21,7 +22,7 @@
     pwsh -File .\install.ps1 -WhatIf
 
 .EXAMPLE
-    pwsh -File .\install.ps1 -DevDrive D:
+    pwsh -File .\install.ps1 -DevDrive E:
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(

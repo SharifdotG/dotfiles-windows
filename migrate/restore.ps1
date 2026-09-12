@@ -24,7 +24,9 @@
     The timestamped folder migrate/backup.sh wrote, copied to this machine.
 
 .PARAMETER CodeRoot
-    Where the projects live on Windows. Default D:\Code, on the Dev Drive.
+    Where the projects live on Windows. Default <Dev Drive>:\Code - D:\Code on
+    the laptop, E:\Code on the desktop. The letter is the one install.ps1
+    -DevDrive recorded, or else the only ReFS volume there is.
 
 .PARAMETER Skip
     Steps to leave out: projects, data, claude. Comma-separated with no spaces,
@@ -34,15 +36,17 @@
     Don't ask before replacing volumes and databases.
 
 .EXAMPLE
-    pwsh -File .\migrate\restore.ps1 -Backup E:\windows-migration\20260911T120000Z
+    pwsh -File .\migrate\restore.ps1 -Backup G:\windows-migration\20260911T120000Z
 
 .EXAMPLE
-    pwsh -File .\migrate\restore.ps1 -Backup E:\windows-migration\20260911T120000Z -Skip projects,data
+    pwsh -File .\migrate\restore.ps1 -Backup G:\windows-migration\20260911T120000Z -Skip projects,data
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Backup,
-    [string]$CodeRoot = 'D:\Code',
+    # No literal default: the Dev Drive is D: on the laptop and E: on the
+    # desktop, so it is worked out below.
+    [string]$CodeRoot,
     # NB: deliberately NOT [ValidateSet]. `pwsh -File` - the way every example
     # here runs this script - passes arguments as literal strings and never
     # parses PowerShell syntax, so `-Skip data,claude` arrives as the single
@@ -71,11 +75,33 @@ function Info([string]$Text)    { Write-Host "        $Text" }
 $Backup   = (Resolve-Path -LiteralPath $Backup -ErrorAction Stop).Path
 $manifest = Get-Content (Join-Path $Backup 'manifest.json') -Raw -ErrorAction Stop | ConvertFrom-Json
 
+# The Dev Drive's letter differs per machine. install.ps1 -DevDrive already
+# pointed the package caches at it, so its letter is trusted first - as long as
+# that drive is still ReFS. Otherwise a machine with exactly one ReFS volume
+# has only one candidate. Anything else is a guess, so ask instead.
+if (-not $CodeRoot) {
+    $refs   = @(Get-Volume -ErrorAction Ignore | Where-Object { $_.DriveLetter -and $_.FileSystemType -eq 'ReFS' } |
+        ForEach-Object { "$($_.DriveLetter)".ToUpperInvariant() })
+    $cache  = [Environment]::GetEnvironmentVariable('npm_config_cache', 'User')
+    $letter = if ($cache -and $refs -contains "$($cache[0])".ToUpperInvariant()) { "$($cache[0])".ToUpperInvariant() }
+              elseif ($refs.Count -eq 1) { $refs[0] }
+    if (-not $letter) {
+        throw "Can't tell which drive is the Dev Drive (ReFS volumes: $(if ($refs) { $refs -join ', ' } else { 'none' })). Pass it: -CodeRoot E:\Code"
+    }
+    $CodeRoot = "${letter}:\Code"
+}
+# Before anything is written: a -CodeRoot on a drive this machine doesn't have
+# (D:\Code typed out of habit on the desktop) would otherwise fail once per
+# project, halfway through.
+$CodeRoot = $CodeRoot.TrimEnd('\')
+$drive    = Split-Path -Qualifier $CodeRoot -ErrorAction Ignore
+if (-not $drive -or -not (Test-Path "$drive\")) { throw "-CodeRoot $CodeRoot is not on a drive this machine has. Nothing was changed." }
+
 # ---- Helpers ------------------------------------------------------------------
 # Claude Code names a project's folder after its path, every character that
 # isn't a letter or digit replaced by '-':
-#   /home/me/Documents/Code/structflow  ->  -home-me-Documents-Code-structflow
-#   D:\Code\structflow                  ->  D--Code-structflow
+#   /home/me/Documents/Code/myapp  ->  -home-me-Documents-Code-myapp
+#   E:\Code\myapp                  ->  E--Code-myapp
 function Get-ProjectKey([string]$Path) { $Path -replace '[^A-Za-z0-9]', '-' }
 
 # A Linux path under the old code root, as the same path under -CodeRoot. $null
@@ -188,8 +214,8 @@ function Restore-Data {
     docker info *> $null
     if ($LASTEXITCODE) { Warn 'Docker Desktop is not running - start it, then re-run with -Skip projects,claude'; return }
 
-    # Compose projects inside the projects being restored - SocialHousingOSS alone
-    # has eight - read from db-backup.sh's manifest: "<compose project> TAB <dir>".
+    # Compose projects inside the projects being restored - one project can hold
+    # several - read from db-backup.sh's manifest: "<compose project> TAB <dir>".
     $composeDirs = @{}
     $inList = $false
     foreach ($line in Get-Content (Join-Path $snap.FullName 'manifest.txt')) {
@@ -272,8 +298,8 @@ function Restore-Data {
         $pgEnv = "PGPASSWORD=$(if ($password) { $password.Substring(18) })"
 
         foreach ($row in $group.Group) {
-            # A fresh volume only has POSTGRES_DB. tryton's server also holds
-            # vera_housing and config_mapper, which have to be created first.
+            # A fresh volume only has POSTGRES_DB. A server that held more
+            # databases than that needs the others created first.
             $existing = @(docker exec -e $pgEnv $container psql -U $row.User -d postgres -tAc 'select datname from pg_database')
             if ($existing -notcontains $row.Db) {
                 docker exec -e $pgEnv $container createdb -U $row.User -O $row.User -T template0 $row.Db *> $null
@@ -293,8 +319,8 @@ function Restore-Data {
                 $output | Select-Object -Last 15 | ForEach-Object { Info "$_" }
             }
         }
-        # Stopped again: tryton's and structflow's Postgres both publish 5432, so
-        # the next one couldn't start while this one runs.
+        # Stopped again: two projects' Postgres services can publish the same
+        # host port, so the next one couldn't start while this one runs.
         Push-Location $first.Dir
         try { docker compose stop $first.Service *> $null } finally { Pop-Location }
     }
@@ -391,7 +417,7 @@ function Restore-Claude {
 
     # Sessions. Transcripts and auto-memory sit in a folder named after the project
     # path; renaming it to the Windows path's name is what makes /resume list them,
-    # and memory load, in D:\Code\<project>. Folders with no Windows equivalent keep
+    # and memory load, in <CodeRoot>\<project>. Folders with no Windows equivalent keep
     # their names: `claude --resume <id>` finds a session from any folder.
     $sessions = Join-Path $Backup 'claude\claude-code.tar.gz'
     if (Test-Path $sessions) {

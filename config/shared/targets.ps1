@@ -6,7 +6,7 @@
 $packages = Join-Path $env:LOCALAPPDATA 'Packages'
 $terminal = @('Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe') |
     ForEach-Object { Join-Path $packages $_ }
-$wallpaper = Join-Path $env:LOCALAPPDATA 'dotfiles\wallpaper.png'
+$wallpaper = Join-Path $env:LOCALAPPDATA 'dotfiles\wallpaper.jpg'
 
 @{
     # Source is repo-relative. OnlyIf, when present, is a folder that must already
@@ -50,7 +50,7 @@ $wallpaper = Join-Path $env:LOCALAPPDATA 'dotfiles\wallpaper.png'
         # somewhere permanent outside the repo, because Windows reads the file
         # again on every sign-in - a path inside a checkout you might move or
         # delete would leave you with a black desktop.
-        @{ Source = 'config\shared\wallpaper\wallpaper.png'; Target = $wallpaper }
+        @{ Source = 'config\shared\wallpaper\wallpaper.jpg'; Target = $wallpaper }
     )
 
     # Applied by install.ps1 once the file above is in place. Style 10 is Fill,
