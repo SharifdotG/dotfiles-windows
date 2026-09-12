@@ -303,7 +303,7 @@ both resolutions are in use.
 ## 7. Gaming notes
 
 - **Run `gameprep` before a game.** It stops PostgreSQL, Docker Desktop and the WSL VM, then shows
-  `mem`. That hands back up to the VM's 4 GB cap, plus PostgreSQL. Bring them back later with
+  `mem`. That hands back up to the VM's 3 GB cap, plus PostgreSQL. Bring them back later with
   `pgstart` and Docker Desktop from the Start menu.
 - **Game Mode stays on** (*Settings → Gaming → Game Mode*); `tune.ps1` reports it. The Xbox app and
   Game Bar are removed by `debloat\windows.ps1`, and Game Mode doesn't need them.

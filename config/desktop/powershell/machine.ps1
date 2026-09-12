@@ -3,7 +3,7 @@
 # profile loads it last, so pgstop and mem are already defined.
 
 # gameprep - hand the dev stack's memory back before starting a game. On 16 GB
-# the Docker VM (capped at 4 GB) plus PostgreSQL is the difference between a
+# the Docker VM (capped at 3 GB) plus PostgreSQL is the difference between a
 # game fitting in RAM and a game stuttering on the pagefile.
 # Everything it stops comes back on demand: pgstart, and Docker Desktop from the
 # Start menu or `docker desktop start`.

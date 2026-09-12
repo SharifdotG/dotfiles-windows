@@ -7,18 +7,22 @@
 
 [wsl2]
 # Ceiling for the whole container VM - a limit, not a reservation; the VM only
-# takes what the containers actually use.
+# takes what the containers actually use. The ceiling also covers the VM's page
+# cache, which autoMemoryReclaim doesn't hand back while a container keeps the VM
+# busy: a 376 MB structflow stack was measured holding 3.3 GB, 2.5 GB of it cache.
 #
-# 4GB because native builds (Node, Nx, .NET) now run on Windows and compete for
+# 3GB because native builds (Node, Nx, .NET) now run on Windows and compete for
 # the same 16 GB - on both machines, and soldered on the laptop. On the desktop,
 # `gameprep` shuts the VM down before a game. A runaway compose stack
 # hits this wall and is OOM-killed inside the VM instead of pushing Windows into
 # the pagefile - the same idea as `capped()` in the Linux zshrc.
 #
-# If the stack you really run needs more, raise it and re-measure with
-# scripts\doctor.ps1 - don't guess. Starting only the services you need
-# (`docker compose up -d postgres keycloak`) is usually the better fix.
-memory=4GB
+# Not 2GB: the kernel, dockerd and containerd take ~0.4 GB before any container,
+# and Keycloak's JVM alone wants ~0.5-0.7 GB. Run one stack at a time
+# (`docker compose up -d postgres keycloak`); if one really needs more, raise
+# this and re-measure with scripts\doctor.ps1 - don't guess. A container that
+# exits with code 137 while the VM is full is the sign it's too low.
+memory=3GB
 
 # The VM has no zram, so this swap is a file on disk. Keep it small: it is a
 # cushion for spikes, not a place for a working set to live.
