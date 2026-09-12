@@ -73,22 +73,24 @@ with a fresh environment.
 | `install.ps1` | Every file in `config\shared\targets.ps1`, env vars, PATH, git identity | — | `gameprep` (`profile.d\machine.ps1`) |
 | `debloat\windows.ps1` | Apps and settings | `-DisableModernStandbyNetworking` | — |
 | `tune.ps1` | Compression, SysMain, pagefile, long paths, crash dumps, PostgreSQL Manual | Sleep-state guide | Hibernation off; reports Memory Integrity, Game Mode and the power plan |
-| `doctor.ps1` | Everything above, Secure Boot and its 2023 certificate, and where the RAM is | Sleep states, power plan, AC/DC power modes | RAM speed, SVM, the `G:` HDD, hibernation, power plan, display resolutions, Memory Integrity, WSL, BitLocker off, one GPU tuner; startup and memory rows for Steam, Epic, SKLauncher, Recordly, Affinity, OBS, Adrenalin |
+| `doctor.ps1` | Everything above, Secure Boot and its 2023 certificate, and where the RAM is | Sleep states, power plan, AC/DC power modes | RAM speed, SVM, the `G:` HDD, hibernation, power plan, display resolutions, Memory Integrity, WSL, BitLocker off, one GPU tuner; memory rows for Steam, Epic, SKLauncher, Recordly, Affinity, OBS, Adrenalin |
 
 ## What's here
 
 | Path | Purpose |
 |---|---|
-| `install.ps1` | Copies the config files into place, backing up anything it replaces. Also creates `~\.gitconfig` with your name and email, sets user environment variables, and adds `%LOCALAPPDATA%\Programs\bin` to PATH |
+| `install.ps1` | Copies the config files into place, backing up anything it replaces. Also creates `~\.gitconfig` with your name and email if it doesn't exist yet, sets user environment variables, adds `%LOCALAPPDATA%\Programs\bin` and `%USERPROFILE%\.local\bin` (Claude Code) to PATH, and sets the desktop wallpaper |
 | `tune.ps1` | Memory compression (and keeping SysMain on, which it needs), a system-managed pagefile, long paths, small crash dumps, and PostgreSQL set to start manually. Then `tune\<profile>.ps1` |
 | `debloat\windows.ps1` | Runs the pinned Win11Debloat silently, with an explicit list of settings and apps, plus the profile's extra switches |
 | `debloat\brave.ps1` | Downloads the pinned, checksum-verified SlimBrave Neo and its "Performance Focused" preset |
 | `lib\profile.ps1` | Profile detection (`Get-DotfilesProfile`) and the merged config (`Get-DotfilesConfig`) |
 | `config\shared\targets.ps1` | Where each shared config file goes, and which environment variables get set. `install.ps1` and `doctor.ps1` both read it |
-| `config\shared\` | PowerShell profile, Windows Terminal (stable and Preview), VS Code Insiders, git, Starship, bat, Docker engine, WSL |
+| `config\shared\` | PowerShell profile, Windows Terminal (stable and Preview), git, Starship, bat, Docker engine, WSL |
+| `config\shared\wallpaper\wallpaper.png` | The desktop wallpaper. `install.ps1` copies it to `%LOCALAPPDATA%\dotfiles\` and points Windows at that copy, Fill-style |
 | `config\shared\office\configuration.xml` | Office Deployment Tool config: Word, Excel and PowerPoint, with no OneNote, OneDrive, Outlook or bundled Teams |
 | `config\shared\postgresql\tuning.sql` | Memory limits for the native PostgreSQL used by nopCommerce |
-| `config\laptop\profile.ps1`, `config\desktop\profile.ps1` | What each machine adds: files, debloat switches, startup warnings, memory-table rows. Data only |
+| `lib\json.ps1` | Reads JSON-with-comments and compares only the keys this repo sets, for the config files their own programs rewrite |
+| `config\laptop\profile.ps1`, `config\desktop\profile.ps1` | What each machine adds: files, debloat switches, memory-table rows. Data only |
 | `config\desktop\powershell\machine.ps1` | `gameprep`: stops PostgreSQL, Docker Desktop and WSL before a game |
 | `tune\laptop.ps1`, `tune\desktop.ps1` | The machine-specific end of `tune.ps1` |
 | `scripts\doctor.ps1` | Read-only. Checks the tuning is actually in effect and shows where the RAM is going |
@@ -111,7 +113,7 @@ with a fresh environment.
 | Akonadi, Baloo and PackageKit removed or masked | Widgets, Copilot, Recall, Bing, suggestions, telemetry, Game Bar, Delivery Optimization, OneDrive, new Outlook and consumer apps removed or disabled. Office installs without OneNote, OneDrive or Outlook | `debloat\windows.ps1`, `config\shared\office` |
 | gamemode on the desktop | Game Mode on, and `gameprep` hands the VM and PostgreSQL memory back before a game | DESKTOP stage 7, `config\desktop` |
 | `NODE_OPTIONS`, `NX_DAEMON` and `DOTNET_gcServer` in `.zshrc` | The same values, as persistent user environment variables, so IDEs inherit them too | `config\shared\targets.ps1` |
-| VS Code watcher and search excludes; tsserver capped at 3 GB | The same `settings.json` | `config\shared\vscode-insiders` |
+| VS Code watcher and search excludes; tsserver capped at 3 GB | Not carried here — VS Code's own Settings Sync does it | VS Code, signed in with GitHub |
 | `fs.inotify.max_user_watches` | Nothing to raise. On Windows the cost of huge file trees is Defender scanning them, so projects, package caches and the PostgreSQL data go on a **Dev Drive**: ReFS, trusted, which puts Defender in performance mode | LAPTOP/DESKTOP stage 2, `install.ps1 -DevDrive` |
 
 **Why the VM cap is 4 GB.** Native builds (Node, Nx, .NET) and PostgreSQL run on Windows; only the
@@ -167,9 +169,15 @@ a ceiling, not a reservation. If the stack you actually run needs more, raise it
 
 | Program | Writes | Handling |
 |---|---|---|
-| Windows Terminal (stable and Preview) | Its whole `settings.json`, stripping comments, whenever you change a setting in its UI | Edit `config\shared\windows-terminal\settings.json` and re-run `install.ps1`, or copy the live file back into the repo. `doctor.ps1` warns when they differ |
-| VS Code Insiders | `settings.json`, whenever you change a setting in the UI | Same |
+| Windows Terminal (stable and Preview) | Its whole `settings.json`, stripping comments, whenever you change a setting in its UI | Edit `config\shared\windows-terminal\settings.json` and re-run `install.ps1`, or copy the live file back into the repo |
 | Docker Desktop | `~\.docker\daemon.json`, from *Settings → Docker Engine* | Same |
+
+Those four are compared **semantically**, not byte for byte: `doctor.ps1` parses both sides
+(comments and trailing commas included) and reports only the settings this repo sets that are no
+longer in force, naming each one — `profiles.defaults.font.face`, say. Reformatting, key order and
+anything the app added on its own are not drift, which is why a file these programs rewrite can
+still read `ok`. `config\shared\targets.ps1` marks them with `Compare = 'JsonSubset'`; the machinery
+is `lib\json.ps1`. Every other managed file is still compared by hash, because nothing rewrites it.
 | `git config --global`, GitHub Desktop | `~\.gitconfig` | Never touched by `install.ps1` after it creates the file. Git reads it after the managed `~\.config\git\config`, so its values win |
 | Windows feature updates | Reinstall some removed apps | Re-run `debloat\windows.ps1`. `doctor.ps1` reports which apps came back |
 | Office setup and updates | OneDrive, if installed without `configuration.xml` | Re-run the Office Deployment Tool with `configuration.xml`, then `debloat\windows.ps1`. `doctor.ps1` flags OneDrive, OneNote and Outlook |
@@ -177,23 +185,39 @@ a ceiling, not a reservation. If the stack you actually run needs more, raise it
 ## Credentials
 
 No tokens, keys or credential helpers are stored here.
-- **Command-line git:** Git for Windows installs **Git Credential Manager** for all users. Your
-  first push to GitHub opens a browser sign-in, and the private forge prompts once. Both logins are
-  kept in Windows Credential Manager.
-- **GitHub Desktop:** signs in on its own.
-- **Identity:** `~\.gitconfig` (your name and email) is created by `install.ps1` and isn't part of
-  the repo.
+- **Command-line git:** Git for Windows installs **Git Credential Manager** for all users, and GCM
+  keeps what it gets in Windows Credential Manager — once per host, for the whole Windows user.
+  GitHub gets a browser sign-in; a self-hosted Gitea is not one of the four hosts GCM knows, so it
+  shows a username/password box instead — give it a Gitea access token. Being signed in to the host
+  in your browser does not count: GCM does not read browser cookies. Details in
+  [docs/SETUP.md](docs/SETUP.md), stage 4.
+- **GitHub Desktop:** signs in on its own, and covers what the GitHub CLI would — `gh` is
+  deliberately not part of this setup.
+- **Identity:** `~\.gitconfig` (your name and email). `install.ps1` creates it only if it is missing,
+  so if GitHub Desktop already wrote one, it is left alone and you are never prompted. Not part of
+  the repo either way.
 
 ## Notes
 
 - **Docker Desktop licence.** It's free for personal use, education, and businesses with under 250
   employees **and** under $10M revenue. Anything else needs a paid plan.
-- **`config\shared\vscode-insiders\settings.json`** is the Linux file with only the Windows terminal
-  profile added. That means it still sets `claudeCode.initialPermissionMode: bypassPermissions` and
-  global tool auto-approval. Both were already on; review them rather than inheriting them by
-  accident.
+- **VS Code is deliberately not managed here.** Its Settings Sync, signed in with a GitHub account,
+  already carries settings, keybindings and extensions between machines, and rewrites them whenever
+  it syncs — so a copy in this repo would be a second owner fighting the first. Nothing to install,
+  nothing to back up, nothing to restore.
 - **Win11Debloat's default app list removes the new Teams.** `debloat\windows.ps1` keeps it. If you
   ever run Win11Debloat by hand with `-RunDefaults`, Teams goes.
-- **PowerShell Preview's Terminal profile is named "PowerShell Preview (msix)".** A stable PowerShell
-  install gets the plain "PowerShell" name. `defaultProfile` in the Terminal settings uses that
-  name.
+- **Windows Terminal's `profiles.list` must not be empty.** Terminal does not fill it in for you: an
+  empty list means no profile, and it refuses to load the file at all ("All profiles were hidden in
+  your settings"), falling back to its own defaults. The repo's `settings.json` therefore lists
+  PowerShell 7 and the two inbox profiles by their fixed GUIDs, and Terminal adds the ones it
+  generates (Git Bash, WSL, Visual Studio) on top.
+- **Windows Terminal's `defaultProfile` fails silently.** Terminal generates the PowerShell 7 profile
+  from whatever `pwsh.exe` it finds — the Store's PowerShell Preview included — and current builds
+  name it plain **`PowerShell`**; older builds used `PowerShell Preview (msix)`. A `defaultProfile`
+  matching no profile is not an error: Terminal opens Windows PowerShell 5.1 instead, which reads a
+  different profile directory, so none of this repo's shell config applies. `doctor.ps1` now checks
+  that the name resolves.
+- **The Nerd Font family was renamed.** Nerd Fonts v3.4 shortened `CaskaydiaCove Nerd Font` to
+  `CaskaydiaCove NF`. A `face` naming a font that isn't installed also falls back without an error,
+  so the Terminal and VS Code configs list both spellings and then `Cascadia Mono`.

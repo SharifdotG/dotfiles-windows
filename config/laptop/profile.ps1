@@ -13,9 +13,7 @@
         '-DisableModernStandbyNetworking'
     )
 
-    # Extra regex alternatives scripts\doctor.ps1 warns about when they start at
-    # sign-in, and extra rows for its memory table. The shared ones cover this
-    # machine.
-    StartupWarn     = @()
+    # Extra rows for the memory table in scripts\doctor.ps1. The shared ones cover
+    # this machine.
     MemoryGroups    = [ordered]@{}
 }

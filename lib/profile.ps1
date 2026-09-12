@@ -51,7 +51,7 @@ function Get-DotfilesConfig {
         Env             = $shared.Env
         DevDriveCaches  = $shared.DevDriveCaches
         DebloatSwitches = @($extra.DebloatSwitches | Where-Object { $_ })
-        StartupWarn     = @($extra.StartupWarn | Where-Object { $_ })
+        Wallpaper       = $shared.Wallpaper
         MemoryGroups    = if ($extra.MemoryGroups) { $extra.MemoryGroups } else { [ordered]@{} }
     }
 }

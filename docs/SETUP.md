@@ -25,13 +25,12 @@ Everything below exists only on the disk you're about to erase.
 ### The one-command backup
 
 **The desktop skips `backup.sh`.** Windows starts fresh there, nopCommerce included, and DESKTOP.md
-stage 0 copies the data to the HDD. The extension list (second line) is still worth saving on both.
+stage 0 copies the data to the HDD.
 
 From this repo's checkout:
 
 ```bash
 ./migrate/backup.sh                       # laptop only: SocialHousingOSS and structflow by default
-mkdir -p ~/Backup && code-insiders --list-extensions > ~/Backup/vscode-extensions.txt
 ```
 
 Each run writes a new `~/Backup/windows-migration/<timestamp>/`. Where the Linux repo's backup
@@ -126,11 +125,13 @@ Updated by the Store. Check that *Store → your profile → Settings → App up
 
 | App | Notes |
 |---|---|
-| PowerShell Preview | Registers `pwsh.exe`. Terminal names its profile "PowerShell Preview (msix)" |
+| PowerShell Preview | Registers `pwsh.exe`. Windows Terminal generates its profile from this and names it plain **PowerShell** — that exact name is what `defaultProfile` points at (see "The two silent failures" below) |
 | Windows Terminal Preview | Then set *Settings → System → For developers → Terminal* to **Windows Terminal Preview** |
+| Python Install Manager | The way python.org now ships Python on Windows. It puts `python`, `py` and `pip` shims in `%LOCALAPPDATA%\Python\bin` (already on PATH) and the runtimes under `%LOCALAPPDATA%\Python\pythoncore-<version>`. Install a runtime with `py install 3` |
+| ChatGPT | The Store build, not the openai.com download. It installs under the package identity **`OpenAI.CodexBeta`** — that is the ChatGPT app, not the Codex CLI below; `Get-AppxPackage` and `winget list` both show that name |
 | Microsoft Teams | Kept by `debloat\windows.ps1` on purpose |
 | WhatsApp Beta | A WebView2 wrapper around WhatsApp Web, so it isn't light. Keep its autostart off |
-| Screenbox Media Player | |
+| Screenbox Media Player | Optional — a media player, nothing depends on it |
 | Wintoys | Use it for health checks, repairs and cleanup. **Not** its Ultimate Performance or Superfetch toggles, and not its service disabling (README, "Things not to fix") |
 
 ### Runtimes (Microsoft)
@@ -143,18 +144,19 @@ Updated by the Store. Check that *Store → your profile → Settings → App up
 
 ### Official installers
 
-Most of these update themselves from inside the app.
+Most of these update themselves from inside the app. **The first three are in order**; the rest can
+follow in any order.
 
 | App | Source | Notes |
 |---|---|---|
-| Git for Windows | [git-scm.com/downloads/win](https://git-scm.com/downloads/win) | Install **first**. Keep **Git Credential Manager**. Line endings: **Checkout as-is, commit as-is**. Claude Code uses its Git Bash for the Bash tool |
-| GitHub Desktop | [desktop.github.com](https://desktop.github.com/) | Updates itself. Signs in on its own |
-| VS Code Insiders | [code.visualstudio.com/insiders](https://code.visualstudio.com/insiders/) | Keep "Add to PATH" |
-| Brave | [brave.com/download](https://brave.com/download/) | |
-| Docker Desktop | [docs.docker.com/desktop/setup/install/windows-install](https://docs.docker.com/desktop/setup/install/windows-install/) | Use the WSL 2 backend. **Licence:** free only for personal use, or for employers under 250 staff and under $10M revenue. Don't start it until stage 3 step 4 |
+| Brave | [brave.com/download](https://brave.com/download/) | **1st.** Edge is the only browser on a fresh install, so getting Brave in place first means every download below happens in the browser you actually keep |
+| VS Code Insiders | [code.visualstudio.com/insiders](https://code.visualstudio.com/insiders/) | **2nd**, before Git: Git's installer only offers "Use Visual Studio Code as Git's default editor" if it is already there. Keep "Add to PATH" |
+| Git for Windows | [git-scm.com/downloads/win](https://git-scm.com/downloads/win) | **3rd.** Keep **Git Credential Manager**. Editor: VS Code Insiders. Line endings: **Checkout as-is, commit as-is**. Claude Code uses its Git Bash for the Bash tool |
+| GitHub Desktop | [desktop.github.com](https://desktop.github.com/) | Updates itself. Signs in on its own, and covers what the GitHub CLI would - so `gh` is deliberately not installed here |
+| Docker Desktop | [docs.docker.com/desktop/setup/install/windows-install](https://docs.docker.com/desktop/setup/install/windows-install/) | Use the WSL 2 backend — its installer pulls in **WSL** if it isn't there, and creates a `docker-desktop` distro; nothing else here needs a WSL distro of your own. **Licence:** free only for personal use, or for employers under 250 staff and under $10M revenue. Don't start it until stage 3 step 4, so the VM is built with `.wslconfig` already in place |
 | Claude Desktop | [claude.ai/download](https://claude.ai/download) | |
-| ChatGPT | [openai.com/chatgpt/download](https://openai.com/chatgpt/download/) | Updates itself, so it doesn't need the Store |
 | Antigravity 2.0 | [antigravity.google/download](https://antigravity.google/download) | |
+| Linear | [linear.app/download](https://linear.app/download) | |
 | Gemini | [gemini.google/desktop](https://gemini.google/desktop) | It uses Alt+Space to open over any window. Keep its autostart off unless you use that shortcut daily |
 | Zed Preview | [zed.dev/download/preview](https://zed.dev/download/preview) | Downloads updates in the background and applies them on restart |
 | Figma Beta | [figma.com/downloads](https://www.figma.com/downloads/) | The *Beta* desktop app |
@@ -163,14 +165,40 @@ Most of these update themselves from inside the app.
 | Telegram Desktop | [desktop.telegram.org](https://desktop.telegram.org/) | The installer version updates itself. Keep its autostart off |
 | OBS Studio | [obsproject.com](https://obsproject.com/) | Desktop encoder and recording path: DESKTOP.md stage 5 |
 
-### Command-line tools
+### Small CLI tools, from winget
+
+The shell tools the PowerShell profile wraps. These are the one group worth taking from winget
+rather than a download: they are single executables that release often, winget shims them into
+`%LOCALAPPDATA%\Microsoft\WinGet\Links` (already on PATH, so nothing to configure) and
+`winget upgrade --all` then keeps all six current in one command.
+
+```powershell
+winget install --exact Starship.Starship sharkdp.bat eza-community.eza sharkdp.fd BurntSushi.ripgrep.MSVC junegunn.fzf
+```
+
+`winget install` takes several package queries at once; `--exact` stops a query matching some other
+package by name. (`--id` is a single filter, not a repeatable flag — it does not work here.)
+
+| Tool | winget id |
+|---|---|
+| starship | `Starship.Starship` |
+| bat | `sharkdp.bat` |
+| eza | `eza-community.eza` |
+| fd | `sharkdp.fd` |
+| ripgrep (`rg`) | `BurntSushi.ripgrep.MSVC` |
+| fzf | `junegunn.fzf` |
+
+The PowerShell profile checks for each one with `Get-Command` before using it, so installing them
+after `install.ps1` is fine — the aliases and completions appear in the next shell.
+
+### Agent CLIs
 
 These are the vendors' own installers, run in PowerShell. Download a script and read it first if
 you'd rather not pipe it.
 
 | Tool | Command | Updates |
 |---|---|---|
-| Claude Code | `irm https://claude.ai/install.ps1 \| iex` | In the background, by itself |
+| Claude Code | `irm https://claude.ai/install.ps1 \| iex` | In the background, by itself. Installs to `%USERPROFILE%\.local\bin` and does **not** add it to PATH — `install.ps1` does that, so run it after (or re-run it) |
 | Codex CLI | `powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 \| iex"` | Re-run the command. Installs to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` |
 | Antigravity CLI (`agy`) | `irm https://antigravity.google/cli/install.ps1 \| iex` | Re-run the command. Installs to `%LOCALAPPDATA%\agy\bin` |
 
@@ -178,13 +206,40 @@ you'd rather not pipe it.
 
 | App | Source | Notes |
 |---|---|---|
-| CaskaydiaCove Nerd Font | [nerdfonts.com/font-downloads](https://www.nerdfonts.com/font-downloads) → *CascadiaCode* | Select every `.ttf`, then *Install for all users* |
-| Starship | [github.com/starship/starship/releases](https://github.com/starship/starship/releases) | `starship-x86_64-pc-windows-msvc.msi` |
-| GitHub CLI | [github.com/cli/cli/releases](https://github.com/cli/cli/releases) | `gh_<version>_windows_amd64.msi`. Then sign in once with `gh auth login` |
-| bat, eza, fd, ripgrep, fzf | [bat](https://github.com/sharkdp/bat/releases) · [eza](https://github.com/eza-community/eza/releases) · [fd](https://github.com/sharkdp/fd/releases) · [ripgrep](https://github.com/BurntSushi/ripgrep/releases) · [fzf](https://github.com/junegunn/fzf/releases) | Download the Windows x64 zips and put the `.exe` files in `%LOCALAPPDATA%\Programs\bin`. `install.ps1` creates that folder and adds it to PATH |
+| CaskaydiaCove Nerd Font | [nerdfonts.com/font-downloads](https://www.nerdfonts.com/font-downloads) → *CascadiaCode* | Select every `.ttf`, then *Install for all users*. No winget package exists for it (winget has only `DEVCOM.JetBrainsMonoNerdFont`), so this stays manual. **Check the family name afterwards** — see below |
 | Node.js LTS | [nodejs.org](https://nodejs.org/) | |
 | pnpm | [pnpm.io/installation](https://pnpm.io/installation) | Use the PowerShell installer; update with `pnpm self-update` |
-| Python | [python.org/downloads/windows](https://www.python.org/downloads/windows/) | Tick "Add python.exe to PATH" |
+
+#### Three ways the Terminal config can be ignored
+
+All three end with Terminal running but none of this repo's settings applied. Only the third one
+says anything on screen. `scripts\doctor.ps1` checks all three.
+
+**`profiles.list` must not be empty.** Terminal does **not** populate an empty list for you — it
+loads the file, finds no profile, shows *"Failed to load settings … All profiles were hidden in your
+settings"* and reverts to its built-in defaults. So `settings.json` lists three profiles with fixed,
+machine-independent GUIDs (PowerShell 7 and the two inbox ones); Terminal adds what it generates
+itself — Git Bash, WSL distros, Visual Studio — on top of them.
+
+**The font family was renamed.** Nerd Fonts v3.4 shortened it from `CaskaydiaCove Nerd Font` to
+**`CaskaydiaCove NF`** (plus `NFM` mono and `NFP` proportional). A `face` naming a font that isn't
+installed falls back to another font without complaint. The configs list both spellings, then
+`Cascadia Mono`, so either release works. Confirm what you actually have:
+
+```powershell
+(New-Object System.Drawing.Text.InstalledFontCollection).Families | Where-Object Name -like 'Caskaydia*'
+```
+
+**`defaultProfile` must match a generated profile name.** Terminal generates the PowerShell 7
+profile from whatever `pwsh.exe` it finds — including the Store's PowerShell Preview — and current
+builds name it plain **`PowerShell`**. Older builds used `PowerShell Preview (msix)`. A name that
+matches nothing is not an error: Terminal quietly opens **Windows PowerShell 5.1** instead, which
+reads a different profile directory, so no starship, no `eza`/`bat` aliases and no `pgstart`. If a
+new tab opens the wrong shell, read the name off *Settings → Startup → Default profile* and put it
+in `config\shared\windows-terminal\settings.json`.
+
+Terminal itself stays a flat Catppuccin Latte surface — no background image, no acrylic. The
+desktop wallpaper is a separate thing, below.
 
 ### Microsoft 365 Apps for enterprise (Word, Excel, PowerPoint)
 
@@ -211,21 +266,100 @@ file in a browser.
 
 ### PostgreSQL (for nopCommerce)
 
-nopCommerce supports PostgreSQL 9.5 or later (since 4.40), so use the current release.
+nopCommerce supports PostgreSQL 9.5 or later (since 4.40), so use the current release. This is a
+**native** install, not a container — it is the one database that has to survive `docker` being
+stopped.
+
+**Part A — install it now (stage 2).**
 
 1. Download the installer from [postgresql.org/download/windows](https://www.postgresql.org/download/windows/)
-   (EDB's installer).
+   (EDB's installer). Not winget: the winget package takes the defaults, and the two choices that
+   matter here — which components, and where the data lives — are only offered by this installer.
 2. **Components:** tick *PostgreSQL Server* and *Command Line Tools*. Untick *pgAdmin 4* and *Stack
    Builder*. Queries and browsing go through the VS Code PostgreSQL extension, `ms-ossdata.vscode-pgsql`.
-3. **Data Directory:** `D:\PostgreSQL\<version>\data`, on the Dev Drive.
-4. After stage 3, `tune.ps1` sets the service to **Manual**. Start and stop it with `pgstart` and
-   `pgstop`; each asks for admin once. On the desktop, `gameprep` stops it for you.
-5. Apply the memory limits once, with the service running, then restart it:
+3. **Data Directory:** `D:\PostgreSQL\18\Data`, on the Dev Drive. (The installer offers
+   `C:\Program Files\PostgreSQL\18\data` — change it. Substitute your major version for `18` here
+   and in every command below.)
+4. **Password.** The installer asks for a password for the `postgres` superuser. Write it down: every
+   `-U postgres` command below prompts for it, and there is no way to recover it later.
+5. **Port.** Accept 5432 in the installer, then change it to **5434** in Part B. The default locale is
+   fine. Let it finish, then come back after stage 3 — `tune.ps1` has to set the service to Manual
+   first.
 
-   ```powershell
-   & "$env:ProgramFiles\PostgreSQL\18\bin\psql.exe" -U postgres -f .\config\shared\postgresql\tuning.sql
-   pgstop; pgstart
-   ```
+   Why 5434: the restored project stacks already publish Postgres containers on the host —
+   `tryton-postgres-1` on **5432** and `structflow-postgres-1` on **5433**. Two servers cannot share
+   a port, and the way this fails is genuinely nasty: the native service cannot bind, so it stays
+   stopped, and `psql -U postgres` on `localhost:5432` then reaches the *container's* database
+   instead. Same host, same port, different server — and the only symptom is
+   `FATAL: password authentication failed`, which reads like your own password is wrong. Worse, had
+   the passwords happened to match, `tuning.sql` would have run `ALTER SYSTEM` against the wrong
+   server. Giving the native install its own port ends the whole class of problem.
+
+**Part B — tune it (after stage 3).**
+
+`tune.ps1` sets the service to **Manual**, so it costs nothing on the days you don't need it. That
+also means it is *stopped* right now, and `psql` cannot connect to a stopped server — so start it
+first. `pgstart` and `pgstop` come from the PowerShell profile and each cost one UAC prompt; on the
+desktop, `gameprep` stops it for you.
+
+**Type these into your own PowerShell session, from the repo root.** Unlike every other command in
+this runbook they are not a script to hand to `pwsh -File`, for two reasons:
+
+- `pgstart` and `pgstop` are **profile functions**. A shell started with `-NoProfile` does not have
+  them (`pwsh -NoProfile -c 'Get-Command pgstart'` finds nothing).
+- Wrapping the block in `pwsh -c "…"` breaks it. The shell you type into expands `$pg` and
+  `$env:ProgramFiles` *before* the inner `pwsh` ever sees the string, so the inner shell is handed
+  an already-empty variable and fails with ``The term '\psql.exe' is not recognized``.
+
+**First, the port.** Edit `D:\PostgreSQL\18\Data\postgresql.conf`, change `port = 5432` to
+`port = 5434`, and save. It is writable without elevation. This is the one setting that cannot go
+through `tuning.sql`: `ALTER SYSTEM` needs a connection, and there is no connection until the server
+can bind a port.
+
+Then, with `-p 5434` on every call so you can never reach a container by accident:
+
+```powershell
+$pg = "$env:ProgramFiles\PostgreSQL\18\bin"
+pgstart
+& "$pg\psql.exe" -h localhost -p 5434 -U postgres -f .\config\shared\postgresql\tuning.sql
+pgstop; pgstart
+& "$pg\psql.exe" -h localhost -p 5434 -U postgres -c 'SHOW shared_buffers;'
+```
+
+If `pgstart` reports the service is still `Stopped`, read the warning it now prints — it names the
+process holding the port. It used to swallow that failure entirely.
+
+The last line should print `256MB`. If it still says `128MB`, the restart did not happen — run
+`pgstop; pgstart` again and re-check.
+
+`psql.exe` is not on PATH, which is why every call spells out `$pg`. Each of the two calls prompts
+for the superuser password from step 4. To type it once instead, set `$env:PGPASSWORD` for the
+session first — it lives only in that shell and dies with it. For a permanent answer, PostgreSQL
+reads `%APPDATA%\postgresql\pgpass.conf`, one `hostname:port:database:username:password` line per
+entry (`localhost:5432:*:postgres:<password>`); it is plain text, so treat it like any other
+credential file.
+
+`tuning.sql` uses `ALTER SYSTEM`, so it writes `postgresql.auto.conf` and never touches the
+installer's `postgresql.conf`. To undo the whole thing: `ALTER SYSTEM RESET ALL;` then restart. The
+file itself explains what each of the five settings is for and which ones need the restart.
+
+### Desktop wallpaper
+
+Nothing to do by hand — `install.ps1` sets it. `config\shared\wallpaper\wallpaper.png` is copied to
+`%LOCALAPPDATA%\dotfiles\wallpaper.png` and Windows is pointed at that copy, with *Fill* (style 10),
+which crops to the display's aspect ratio instead of stretching. The image is 3840×2160 — 16:9, like
+both machines' panels — and it is a small centred mark on a flat field, so nothing of interest sits
+near an edge that a crop could reach.
+
+It is deliberately **not** left inside the repo checkout: Windows re-reads the file at every
+sign-in, so a path in a folder you might move or delete would eventually leave you with a black
+desktop. `install.ps1` writes the three `HKCU:\Control Panel\Desktop` values and then calls
+`SystemParametersInfo`, which is what makes the change appear immediately rather than at the next
+sign-in. `doctor.ps1` reports it if *Personalization → Background* later points somewhere else.
+
+To change it, replace `config\shared\wallpaper\wallpaper.png` and re-run `install.ps1`. A different
+file extension means editing the two `wallpaper.` lines in `config\shared\targets.ps1` as well, since
+the copied file keeps its name.
 
 ### Mouse cursor: Cursor Concept 3 (free)
 
@@ -251,13 +385,22 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
    ```powershell
    pwsh -File .\debloat\windows.ps1       # restore point, then Win11Debloat, silently (keeps Teams)
    pwsh -File .\tune.ps1
-   pwsh -File .\install.ps1 -DevDrive D:  # asks once for your git name and email
+   pwsh -File .\install.ps1 -DevDrive D:  # may ask for your git name and email - see below
    Restart-Computer
    ```
 
    Each script prints `Profile: laptop` or `Profile: desktop` first. If that's wrong, pass
    `-Profile laptop` or `-Profile desktop` to every script (README, "How the two machines are told
    apart").
+
+   **The git identity prompt only appears if `~\.gitconfig` is missing.** If GitHub Desktop has
+   already signed in, it created that file and wrote your name and email into it, so `install.ps1`
+   leaves it alone and never asks — that is correct, not a step that got skipped. Confirm with
+   `git config --global --show-origin user.name`; `doctor.ps1` reports it as `git identity:`.
+
+   `install.ps1` also adds two folders to your user PATH: `%LOCALAPPDATA%\Programs\bin` (a spare
+   folder for one-off executables) and `%USERPROFILE%\.local\bin`, which is where Claude Code's
+   installer puts `claude.exe` without putting it on PATH itself.
 3. **Brave.** Run `pwsh -File .\debloat\brave.ps1`. In SlimBrave Neo, click **Import**, choose the
    *Performance Focused Preset.json* it put next to the script, then **Apply Settings**. Restart
    Brave and check `brave://policy`. The preset turns Leo off; switch it back on in the GUI before
@@ -268,9 +411,11 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
      WSL 2 based engine* on.
    - *Resources*: turn on *Resource Saver*.
    - *Docker Engine* should show this repo's `daemon.json`.
-5. **Startup apps.** In *Settings → Apps → Startup*, turn off Teams, WhatsApp, Telegram, ChatGPT,
-   Claude, Gemini, Vesktop, GitHub Desktop, Figma, Docker Desktop and Brave. Also turn it off inside
-   the apps that switch it back on by themselves:
+5. **Startup apps.** Your call, not the repo's — `doctor.ps1` only *lists* what starts at sign-in, it
+   no longer has an opinion about any of it. The ones usually worth turning off in
+   *Settings → Apps → Startup* are Teams, WhatsApp, Telegram, ChatGPT, Claude, Gemini, Vesktop,
+   GitHub Desktop, Figma, Docker Desktop and Brave. A few switch themselves back on, so turn it off
+   inside the app too:
    - Teams: *Settings → General → Auto-start Teams*
    - WhatsApp: *Settings → General → Start WhatsApp at login*
    - Telegram: *Settings → Advanced → Launch Telegram when system starts*
@@ -286,12 +431,38 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
 ## 4. Restore
 
 **On the desktop, skip `restore.ps1`:** it has no `backup.sh` folder, and nopCommerce starts from an
-empty database. The notes after the script (hot reload, VS Code extensions) still apply.
+empty database. The notes after the script (hot reload, the nopCommerce database) still apply.
 
 Before you start:
 - Docker Desktop is running.
 - `claude` has been started once to sign in.
 - The stage 0 backup folder is reachable, on the external drive or copied to `D:\Backup`.
+- **Each git remote has been signed into once**, so the clones don't stop halfway. See below.
+
+### Git credentials, once per host
+
+Git for Windows installs **Git Credential Manager** as the system-wide helper, and GCM keeps what it
+gets in **Windows Credential Manager** — per Windows user, not per repo. Being signed in to the host
+in Brave does not help: GCM does not read browser cookies.
+
+What that means per host:
+
+| Host | First time | After that |
+|---|---|---|
+| GitHub | GCM opens a browser window and you approve it. GitHub Desktop does this on its own, so if you signed into it there is usually nothing left to do | Silent |
+| A self-hosted Gitea, such as `internal-git.siderian.cloud` | GCM has no browser sign-in for Gitea — it is not one of the four hosts it knows (GitHub, GitLab, Bitbucket, Azure DevOps). It shows a plain username/password box instead. Use a **Gitea access token** as the password (*Gitea → Settings → Applications → Generate New Token*, scope `read:repository`), not your account password | Silent |
+
+So the sign-in is a one-time cost per host on a fresh Windows install, and the reason it did not
+happen on the previous install is simply that Windows Credential Manager already held the entry.
+
+Get it out of the way before the restore, so nothing blocks in the middle of it:
+
+```powershell
+git ls-remote https://internal-git.siderian.cloud/SocialHousingOSS/SocialHousingOSS.git   # prompts once
+cmdkey /list | Select-String siderian                                                     # proves it stuck
+```
+
+Then the restore runs unattended.
 
 Then one command, from this repo:
 
@@ -300,9 +471,9 @@ pwsh -File .\migrate\restore.ps1 -Backup E:\windows-migration\<timestamp>
 ```
 
 1. **Verify.** Every file is checked against `SHA256SUMS` before anything changes.
-2. **Projects.** SocialHousingOSS and structflow are cloned into `D:\Code` (Git Credential Manager asks
-   you to sign in once), and their local-only files go back in. Files that already exist are left
-   alone.
+2. **Projects.** SocialHousingOSS and structflow are cloned into `D:\Code`, on the branch
+   `backup.sh` recorded, and their local-only files go back in. Files that already exist are left
+   alone. Git Credential Manager prompts here if you skipped the step above.
 3. **Data.** Their Docker volumes and every Postgres database are restored. It asks once first,
    because this replaces what's in them. Each database server is started on its own and stopped
    again, since tryton's and structflow's both use port 5432.
@@ -315,8 +486,12 @@ pwsh -File .\migrate\restore.ps1 -Backup E:\windows-migration\<timestamp>
    - Claude Desktop's Code-tab list is best effort: its format isn't documented. Any session also
      resumes with `claude --resume <id>`.
 
-It's safe to re-run, and `-Skip projects,data,claude` leaves steps out. For example, open Claude
-Desktop once and quit it, then run `-Skip projects,data`. Finally, bring each stack up with
+It's safe to re-run, and `-Skip` leaves steps out — any of `projects`, `data`, `claude`. Two useful
+runs: `-Skip data,claude` does the clones only, so you can check them before anything existing is
+replaced; and after opening Claude Desktop once and quitting it, `-Skip projects,data` does just the
+Claude step. **Comma-separated, with no space after the comma** — `pwsh -File` splits its arguments
+on whitespace, so `-Skip data, claude` would fail with "a positional parameter cannot be found".
+Finally, bring each stack up with
 `docker compose up -d` in its folder.
 
 The script doesn't cover:
@@ -331,24 +506,23 @@ Newer `pg_restore` versions read dumps made by older servers, so it restores as-
 ```powershell
 pgstart
 $pg = "$env:ProgramFiles\PostgreSQL\18\bin"
-& "$pg\createdb.exe"   -U postgres <database>
-& "$pg\pg_restore.exe" -U postgres -d <database> --no-owner --no-privileges <dump>
+& "$pg\createdb.exe"   -h localhost -p 5434 -U postgres <database>
+& "$pg\pg_restore.exe" -h localhost -p 5434 -U postgres -d <database> --no-owner --no-privileges <dump>
 ```
 
 If roles are missing, apply the dump's `.globals.sql` with `psql` first. Point nopCommerce's
-`appsettings.json` connection string at `localhost:5432`.
+`appsettings.json` connection string at **`localhost:5434`** — not 5432, which belongs to the tryton
+container (see the PostgreSQL section in stage 2).
 
 **Hot reload in containers.** Services that bind-mount their source (`./app:/app/app` in
 SocialHousingOSS) don't receive file-change events from files on the Windows side. Switch the
 watcher to polling. For uvicorn/watchfiles, add `WATCHFILES_FORCE_POLLING=true` to the service's
 environment.
 
-**VS Code extensions.** Install your saved list, plus the PostgreSQL extension:
-
-```powershell
-Get-Content .\vscode-extensions.txt | ForEach-Object { code-insiders --install-extension $_ }
-code-insiders --install-extension ms-ossdata.vscode-pgsql
-```
+**VS Code.** Nothing to do, and nothing in this repo. Sign in to **Settings Sync** with your GitHub
+account (*gear → Backup and Sync Settings*) and it restores settings, keybindings, extensions,
+snippets and UI state on its own. The one extension worth checking for afterwards is the PostgreSQL
+one this runbook assumes, `ms-ossdata.vscode-pgsql`.
 
 ## 5. Measure
 

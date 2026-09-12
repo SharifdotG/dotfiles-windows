@@ -203,11 +203,50 @@ if (Get-Command npx -CommandType Application -ErrorAction Ignore) {
 # needs admin, hence one UAC prompt. The elevated step runs in Windows PowerShell,
 # which is always installed and isn't a Store-packaged app.
 # The service is looked up when you call these, not at profile load.
+
+# The port the service will actually try to bind, read from the data directory
+# the service command line points at (pg_ctl ... -D "<dir>").
+function Get-PgPort([string]$ServiceName) {
+    $path = (Get-CimInstance Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Ignore).PathName
+    if ($path -match '-D\s+"([^"]+)"') {
+        $conf = Join-Path $Matches[1] 'postgresql.conf'
+        if (Test-Path $conf) {
+            $found = Select-String -Path $conf -Pattern '^\s*port\s*=\s*(\d+)' | Select-Object -First 1
+            if ($found) { return [int]$found.Matches[0].Groups[1].Value }
+        }
+    }
+    5432
+}
+
 function Invoke-PgService([ValidateSet('Start', 'Stop')][string]$Action) {
     $service = Get-Service -Name 'postgresql*' -ErrorAction Ignore | Select-Object -First 1
     if (-not $service) { Write-Warning 'No PostgreSQL service is installed.'; return }
-    Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden `
-        -ArgumentList @('-NoProfile', '-Command', "$Action-Service -Name '$($service.Name)'")
+
+    # The elevated window is hidden, so anything it prints is lost. Without this,
+    # a service that REFUSES to start looks exactly like one that started - and
+    # then psql quietly connects to whatever else holds the port instead, which
+    # is a Docker container publishing 5432 often enough to matter. Send the
+    # failure back through a file and say so.
+    $errFile = Join-Path ([IO.Path]::GetTempPath()) "pgservice-$PID.txt"
+    Remove-Item -LiteralPath $errFile -ErrorAction Ignore
+    $command = "try { $Action-Service -Name '$($service.Name)' -ErrorAction Stop } " +
+               "catch { `$_.Exception.Message | Set-Content -LiteralPath '$errFile'; exit 1 }"
+    $elevated = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden `
+        -ArgumentList @('-NoProfile', '-Command', $command)
+
+    if ($elevated.ExitCode -ne 0) {
+        $reason = if (Test-Path $errFile) { (Get-Content $errFile -Raw).Trim() } else { "exit code $($elevated.ExitCode)" }
+        Write-Warning "$Action-Service failed: $reason"
+        if ($Action -eq 'Start') {
+            $port  = Get-PgPort $service.Name
+            $owner = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Ignore | Select-Object -First 1
+            if ($owner) {
+                $name = (Get-Process -Id $owner.OwningProcess -ErrorAction Ignore).Name
+                Write-Warning "Port $port is already held by $name (pid $($owner.OwningProcess)). A Docker container that publishes $port does this - `docker ps` shows which. Stop it, or give this server its own port in postgresql.conf."
+            }
+        }
+    }
+    Remove-Item -LiteralPath $errFile -ErrorAction Ignore
     Get-Service -Name $service.Name | Format-Table Name, Status, StartType -AutoSize
 }
 function pgstart  { Invoke-PgService -Action Start }

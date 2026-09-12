@@ -266,7 +266,9 @@ doesn't make vanilla faster; a large modpack may want 6 GB.
 ### Startup apps
 
 In *Settings → Apps → Startup*, turn off Steam, Epic Games Launcher, SKLauncher and Recordly. Leave
-**AMD Software** on (stage 3). `doctor.ps1` warns when any of the launchers come back.
+**AMD Software** on (stage 3). `doctor.ps1` lists everything that starts at sign-in, so a launcher
+that turned itself back on shows up there — but it is a list, not a verdict; what to keep is your
+call.
 
 ## 6. Power and displays
 

@@ -93,25 +93,38 @@ if ($name) {
     $changed++
 }
 
-# ---- 3. PATH entry for hand-installed CLI tools -----------------------------
+# ---- 3. PATH entries installers do not add themselves -----------------------
 Write-Host "`nUser PATH"
-$bin      = Join-Path $env:LOCALAPPDATA 'Programs\bin'
-$binEntry = '%LOCALAPPDATA%\Programs\bin'
+# Entry = the raw %VAR% form to store; Note = why; Create = make the folder if it
+# is missing (only for the one this repo owns).
+#
+# winget-installed tools (bat, eza, fd, rg, fzf, starship) need nothing here:
+# winget shims them into %LOCALAPPDATA%\Microsoft\WinGet\Links and puts that on
+# PATH itself. Claude Code's installer is the one that does not - it drops
+# claude.exe in ~\.local\bin and leaves PATH alone, so `claude` is missing from
+# every new shell until this runs.
+$pathEntries = @(
+    @{ Entry = '%LOCALAPPDATA%\Programs\bin'; Note = 'a spare folder for one-off .exe files'; Create = $true }
+    @{ Entry = '%USERPROFILE%\.local\bin';    Note = 'where claude.ai/install.ps1 puts claude.exe' }
+)
 # NB: read and write the RAW registry value. [Environment]::GetEnvironmentVariable
 # expands %VARS% and SetEnvironmentVariable writes REG_SZ, so one round trip
 # through them silently hard-codes every %USERPROFILE%-style entry already there.
 $envKey  = 'HKCU:\Environment'
-$rawPath = (Get-Item $envKey).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-$parts   = @($rawPath -split ';' | Where-Object { $_ })
-$present = $parts | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -eq $bin }
-if ($present) {
-    Write-Line '=' $binEntry
-} elseif ($PSCmdlet.ShouldProcess('HKCU\Environment\Path', "Append $binEntry")) {
-    New-Item -ItemType Directory -Force -Path $bin | Out-Null
-    Set-ItemProperty -Path $envKey -Name Path -Value (($parts + $binEntry) -join ';') -Type ExpandString
-    Write-Line '+' "$binEntry  (put the bat, eza, fd, rg and fzf .exe files here)"
-    $pathChanged = $true
-    $changed++
+foreach ($entry in $pathEntries) {
+    $expanded = [Environment]::ExpandEnvironmentVariables($entry.Entry).TrimEnd('\')
+    $rawPath  = (Get-Item $envKey).GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+    $parts    = @($rawPath -split ';' | Where-Object { $_ })
+    $present  = $parts | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -eq $expanded }
+    if ($present) {
+        Write-Line '=' $entry.Entry
+    } elseif ($PSCmdlet.ShouldProcess('HKCU\Environment\Path', "Append $($entry.Entry)")) {
+        if ($entry.Create) { New-Item -ItemType Directory -Force -Path $expanded | Out-Null }
+        Set-ItemProperty -Path $envKey -Name Path -Value (($parts + $entry.Entry) -join ';') -Type ExpandString
+        Write-Line '+' "$($entry.Entry)  ($($entry.Note))"
+        $pathChanged = $true
+        $changed++
+    }
 }
 
 # ---- 4. User environment variables ------------------------------------------
@@ -158,6 +171,40 @@ foreach ($kv in $vars.GetEnumerator()) {
 if ($pathChanged -and -not $broadcast -and -not $WhatIfPreference) {
     $first = @($vars.Keys)[0]
     [Environment]::SetEnvironmentVariable($first, $vars[$first], 'User')
+}
+
+# ---- 5. Desktop wallpaper ---------------------------------------------------
+# The file itself was copied by step 1, like any other config file. This only
+# points Windows at it. Two halves, and both are needed: the registry values are
+# what survives a sign-out, and SystemParametersInfo is what applies them now
+# instead of at the next sign-in.
+Write-Host "`nDesktop wallpaper"
+$paper = $machine.Wallpaper
+if (-not (Test-Path $paper.Path)) {
+    Write-Line '-' "$($paper.Path) is missing - nothing to set"
+} else {
+    $desktop = 'HKCU:\Control Panel\Desktop'
+    $current = Get-ItemProperty -Path $desktop -ErrorAction SilentlyContinue
+    if ($current.WallPaper -eq $paper.Path -and $current.WallpaperStyle -eq $paper.Style -and $current.TileWallpaper -eq $paper.Tile) {
+        Write-Line '=' $paper.Path
+    } elseif ($PSCmdlet.ShouldProcess($paper.Path, 'Set as the desktop wallpaper')) {
+        Set-ItemProperty -Path $desktop -Name WallPaper       -Value $paper.Path
+        Set-ItemProperty -Path $desktop -Name WallpaperStyle  -Value $paper.Style
+        Set-ItemProperty -Path $desktop -Name TileWallpaper   -Value $paper.Tile
+        # SPI_SETDESKWALLPAPER = 0x0014. SPIF_UPDATEINIFILE (1) | SPIF_SENDCHANGE (2)
+        # makes Explorer re-read it and redraw straight away. Windows then keeps its
+        # own re-encoded copy in %APPDATA%\Microsoft\Windows\Themes, so the file
+        # above is read at sign-in rather than held open.
+        if (-not ('DotfilesWallpaper' -as [type])) {
+            Add-Type -Name DotfilesWallpaper -Namespace Dotfiles -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+'@
+        }
+        $applied = [Dotfiles.DotfilesWallpaper]::SystemParametersInfo(0x0014, 0, $paper.Path, 0x0001 -bor 0x0002)
+        Write-Line '+' "$($paper.Path)$(if (-not $applied) { ' (set for next sign-in; Explorer did not redraw)' })"
+        $changed++
+    }
 }
 
 Write-Host "`nDone: $changed change(s)."

@@ -27,7 +27,8 @@
     Where the projects live on Windows. Default D:\Code, on the Dev Drive.
 
 .PARAMETER Skip
-    Steps to leave out: projects, data, claude.
+    Steps to leave out: projects, data, claude. Comma-separated with no spaces,
+    because `pwsh -File` splits arguments on whitespace: -Skip data,claude.
 
 .PARAMETER Yes
     Don't ask before replacing volumes and databases.
@@ -42,9 +43,23 @@
 param(
     [Parameter(Mandatory)][string]$Backup,
     [string]$CodeRoot = 'D:\Code',
-    [ValidateSet('projects', 'data', 'claude')][string[]]$Skip = @(),
+    # NB: deliberately NOT [ValidateSet]. `pwsh -File` - the way every example
+    # here runs this script - passes arguments as literal strings and never
+    # parses PowerShell syntax, so `-Skip data,claude` arrives as the single
+    # string "data,claude". ValidateSet compares that whole string against the
+    # set, fails, and the documented invocation becomes impossible. Splitting
+    # and checking below accepts it. Write the list with NO space after the
+    # comma: `pwsh -File` splits its arguments on whitespace, so "data, claude"
+    # would make "claude" a second, unbindable positional argument.
+    # ArgumentCompletions still offers the three values when you Tab.
+    [ArgumentCompletions('projects', 'data', 'claude')][string[]]$Skip = @(),
     [switch]$Yes
 )
+
+$steps = 'projects', 'data', 'claude'
+$Skip  = @($Skip | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
+$unknown = @($Skip | Where-Object { $_ -notin $steps })
+if ($unknown) { throw "Unknown -Skip step(s): $($unknown -join ', '). Choose from $($steps -join ', ')." }
 
 $tar    = Join-Path $env:SystemRoot 'System32\tar.exe'   # bsdtar, part of Windows
 $counts = @{ ok = 0; warn = 0 }
@@ -99,8 +114,14 @@ function Copy-Missing([string]$From, [string]$To) {
 $projects = @(Get-Content (Join-Path $Backup 'projects\projects.tsv') -ErrorAction Stop |
     Where-Object { $_ -and -not $_.StartsWith('#') } |
     ForEach-Object {
-        $name, $remote, $branch = $_ -split "`t"
-        [pscustomobject]@{ Name = $name; Remote = $remote; Branch = $branch; Dir = Join-Path $CodeRoot $name }
+        # projects.tsv: name, remote, branch, commit. Name every column: the LAST
+        # variable in a PowerShell multiple assignment collects everything left
+        # over, so three names against four columns would silently make $branch
+        # an array of @(branch, commit) - and splatting that into git clone puts
+        # the commit on the command line as a second positional argument.
+        # Commit is recorded by backup.sh but nothing here checks it out.
+        $name, $remote, $branch, $commit = $_ -split "`t"
+        [pscustomobject]@{ Name = $name; Remote = $remote; Branch = $branch; Commit = $commit; Dir = Join-Path $CodeRoot $name }
     })
 
 # The project a recorded Linux directory belongs to, or $null.
@@ -139,7 +160,11 @@ if ('projects' -notin $Skip) {
             Warn "$($p.Name): the backup has no remote for it - clone it into $($p.Dir) yourself, then re-run"; continue
         } else {
             Info "cloning $($p.Remote) - Git Credential Manager may ask you to sign in"
-            $cloneArgs = @('clone') + $(if ($p.Branch) { @('--branch', $p.Branch) }) + @($p.Remote, $p.Dir)
+            # A detached HEAD records an empty branch column, and '--' stops git
+            # reading a remote that begins with a dash as an option.
+            $cloneArgs = @('clone') +
+                $(if (-not [string]::IsNullOrWhiteSpace($p.Branch)) { @('--branch', $p.Branch) }) +
+                @('--', $p.Remote, $p.Dir)
             git @cloneArgs
             if ($LASTEXITCODE) { Warn "$($p.Name): git clone failed"; continue }
             Ok "$($p.Name) cloned into $($p.Dir)"
@@ -179,7 +204,9 @@ function Restore-Data {
     $volumes = @(Get-Content (Join-Path $snap.FullName 'volumes.tsv') -ErrorAction Ignore |
         Where-Object { $_ -and -not $_.StartsWith('#') } |
         ForEach-Object {
-            $vol, $file = $_ -split "`t"
+            # volumes.tsv: volume, file, bytes, sha256 - all four named, for the
+            # reason spelled out where projects.tsv is read.
+            $vol, $file, $bytes, $sha = $_ -split "`t"
             $compose = $composeDirs.Keys | Where-Object { $vol.StartsWith("${_}_") } |
                 Sort-Object Length -Descending | Select-Object -First 1
             if ($compose) {

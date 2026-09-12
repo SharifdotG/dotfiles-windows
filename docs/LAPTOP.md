@@ -80,7 +80,12 @@ breakdown. Take three snapshots and record them here.
 |---|---|---|---|---|---|---|---|---|---|
 | Idle, fresh install (clone the repo, run only the doctor) | | | | | | | | | |
 | Idle, after SETUP stage 3 and a restart | | | | | | | | | |
+| Browsing, 2026-09-12 | 13.2 / 18.6 GB | 5.5 GB | 2.14 | 0.00 | 0.63 | 0.00 | 0.00 | 0.91 | Brave with a working set of tabs, Claude and ChatGPT desktop open (0.97 GB between them). Docker Desktop present but its VM never started; PostgreSQL stopped, as `tune.ps1` leaves it. No editor, no build |
 | Normal dev session | | | | | | | | | |
+
+The 2026-09-12 row is one real sample, not a floor: **a browser alone accounts for 2.1 GB**, and the
+compression store was already holding 0.91 GB at 71% commit — so on this machine the interesting
+question is what is left for a build, not what idle costs.
 
 Then set `memory=` in `config\shared\wsl\.wslconfig` from the dev-session row, and re-run `install.ps1`.
 The file is shared, so compare with the desktop's table before you change it.

@@ -6,29 +6,57 @@
 $packages = Join-Path $env:LOCALAPPDATA 'Packages'
 $terminal = @('Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe') |
     ForEach-Object { Join-Path $packages $_ }
-$vscode   = Join-Path $env:APPDATA 'Code - Insiders\User'
+$wallpaper = Join-Path $env:LOCALAPPDATA 'dotfiles\wallpaper.png'
 
 @{
     # Source is repo-relative. OnlyIf, when present, is a folder that must already
     # exist - the Store package folder of each Windows Terminal (stable is built
     # in, Preview comes from the Store) - so a Terminal that isn't installed
     # doesn't get a settings file nothing would ever read.
+    #
+    # Compare = 'JsonSubset' marks a file its own program rewrites: Terminal,
+    # Terminal and Docker Desktop reformat theirs and drop the comments the moment
+    # a setting is changed in their UI. install.ps1 still copies the whole file,
+    # but doctor.ps1 checks only that the keys set here are still in force, so
+    # cosmetic churn is not reported as drift (lib\json.ps1). Everything without
+    # this field is compared by hash. Ignore lists dotted key paths to leave out.
     Files = @(
         @{ Source = 'config\shared\powershell\Microsoft.PowerShell_profile.ps1'; Target = $PROFILE.CurrentUserCurrentHost }
         foreach ($package in $terminal) {
-            @{ Source = 'config\shared\windows-terminal\settings.json'; Target = Join-Path $package 'LocalState\settings.json'; OnlyIf = $package }
+            # Ignored: $schema and $help are editor hints, and Terminal Preview
+            # swaps in its own -preview schema URL. defaultProfile is written here
+            # as a readable profile NAME, but Terminal resolves it to that
+            # profile's GUID and writes the GUID back - a plain string comparison
+            # would call that drift forever. doctor.ps1 has a check of its own for
+            # it, which resolves both forms to a name before comparing.
+            @{ Source = 'config\shared\windows-terminal\settings.json'; Target = Join-Path $package 'LocalState\settings.json'; OnlyIf = $package
+               Compare = 'JsonSubset'; Ignore = @('$schema', '$help', 'defaultProfile') }
         }
-        @{ Source = 'config\shared\vscode-insiders\settings.json';    Target = Join-Path $vscode 'settings.json' }
-        @{ Source = 'config\shared\vscode-insiders\keybindings.json'; Target = Join-Path $vscode 'keybindings.json' }
+        # No VS Code here on purpose. Its own Settings Sync, signed in with a
+        # GitHub account, already carries settings, keybindings and extensions
+        # across machines - and it writes them back whenever it syncs, so a copy
+        # in this repo would be a second owner fighting the first.
         # Git's XDG global file. ~\.gitconfig is left to you, GitHub Desktop and
         # `git config --global` - see the header of config\shared\git\config.
         @{ Source = 'config\shared\git\config';             Target = Join-Path $HOME '.config\git\config' }
         @{ Source = 'config\shared\starship\starship.toml'; Target = Join-Path $HOME '.config\starship.toml' }
         @{ Source = 'config\shared\bat\config';             Target = Join-Path $env:APPDATA 'bat\config' }
-        # Docker Desktop's documented location; Settings > Docker Engine edits it.
-        @{ Source = 'config\shared\docker\daemon.json';     Target = Join-Path $HOME '.docker\daemon.json' }
+        # Docker Desktop's documented location; Settings > Docker Engine edits it,
+        # and re-serialises the whole file when it does.
+        @{ Source = 'config\shared\docker\daemon.json';     Target = Join-Path $HOME '.docker\daemon.json'; Compare = 'JsonSubset' }
         @{ Source = 'config\shared\wsl\.wslconfig';         Target = Join-Path $HOME '.wslconfig' }
+        # The desktop wallpaper. Copying it is all this entry does; install.ps1
+        # then points Windows at this path (see Wallpaper below). It has to live
+        # somewhere permanent outside the repo, because Windows reads the file
+        # again on every sign-in - a path inside a checkout you might move or
+        # delete would leave you with a black desktop.
+        @{ Source = 'config\shared\wallpaper\wallpaper.png'; Target = $wallpaper }
     )
+
+    # Applied by install.ps1 once the file above is in place. Style 10 is Fill,
+    # which crops to the aspect ratio rather than stretching - the image is
+    # 3840x2160, so it fills both machines' displays without distortion.
+    Wallpaper = @{ Path = $wallpaper; Style = '10'; Tile = '0' }
 
     # Persistent USER environment variables - IDEs, build tools and anything
     # launched from the Start menu inherit these, not only shells that ran the

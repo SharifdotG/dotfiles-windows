@@ -15,11 +15,6 @@
     # Extra Win11Debloat switches. The shared list already fits a desktop.
     DebloatSwitches = @()
 
-    # Launchers that turn their own autostart back on and then sit in the tray.
-    # NB: AMD Software is left off on purpose - it is what re-applies the
-    # Adrenalin fan curve and power limit after sign-in.
-    StartupWarn = @('steam', 'epicgames', 'sklauncher', 'recordly', 'affinity')
-
     # Extra rows for the memory table in scripts\doctor.ps1 (process name regex,
     # matched without .exe). None of them overlap a shared row.
     MemoryGroups = [ordered]@{
