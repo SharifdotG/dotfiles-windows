@@ -506,11 +506,12 @@ pwsh -File .\migrate\restore.ps1 -Backup $backup
 3. **Data.** Their Docker volumes and every Postgres database are restored. It asks once first,
    because this replaces what's in them. Each database server is started on its own and stopped
    again, since two projects' servers can publish the same port.
-4. **Claude.**
-   - MCP servers are merged into `~\.claude.json`, and `npx` servers get the `cmd /c` wrapper Windows
-     needs.
-   - Skills go into `~\.agents\skills` and are linked into `~\.claude\skills`. Settings and rules are
-     copied.
+4. **Claude and Antigravity (AI Agents).**
+   - MCP servers are merged into `~\.claude.json` and translated into `~\.gemini\config\mcp_config.json`
+     with `serverUrl` + `headers`, and `npx` servers get the `cmd /c` wrapper Windows needs.
+   - Skills go into `~\.agents\skills` and are linked into both `~\.claude\skills` and
+     `~\.gemini\config\skills`, with `~\.gemini\config\skills.json` registered.
+   - You can re-synchronize MCP servers and skills at any time with `scripts\sync-ai-agents.ps1`.
    - Transcripts and memory move to their `D:\Code` (or `E:\Code`) project names, so `/resume` lists
      them there.
    - Claude Desktop's Code-tab list is best effort: its format isn't documented. Any session also
@@ -526,7 +527,7 @@ Finally, bring each stack up with
 
 The script doesn't cover:
 - **Plugins:** it prints their names for `/plugin install`.
-- **Codex and Antigravity:** their Linux configs are in the backup's `agents\` folder.
+- **Codex:** Linux config is in the backup's `agents\` folder.
 - **claude.ai connectors:** they ask you to sign in again.
 
 **nopCommerce database (native PostgreSQL).** Nothing is carried over for it, so it starts empty. To

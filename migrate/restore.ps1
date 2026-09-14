@@ -492,9 +492,113 @@ function Restore-Claude {
         Info 'Best effort. If one does not show up, its transcript still resumes with: claude --resume <session id>'
     }
 }
+
+# ---- 5. Antigravity -----------------------------------------------------------
+function Restore-Antigravity {
+    $geminiConfigDir = Join-Path $HOME '.gemini\config'
+    $geminiMcpConfig = Join-Path $geminiConfigDir 'mcp_config.json'
+    $geminiSkillsDir = Join-Path $geminiConfigDir 'skills'
+    $geminiSkillsJson = Join-Path $geminiConfigDir 'skills.json'
+    $store           = Join-Path $HOME '.agents\skills'
+    $agents          = Join-Path $Backup 'agents'
+
+    New-Item -ItemType Directory -Force -Path $geminiConfigDir, $geminiSkillsDir | Out-Null
+
+    # 1. MCP servers: backup's antigravity-mcp_config.json merged with ~\.claude.json
+    $backupMcp = Join-Path $agents 'antigravity-mcp_config.json'
+    $claudeConfig = Join-Path $HOME '.claude.json'
+    $mcpServers = [ordered]@{}
+
+    if (Test-Path $backupMcp) {
+        $parsed = Get-Content $backupMcp -Raw | ConvertFrom-Json -AsHashtable
+        if ($parsed.mcpServers) { $mcpServers = $parsed.mcpServers }
+    }
+
+    if (Test-Path $claudeConfig) {
+        $cCfg = Get-Content $claudeConfig -Raw | ConvertFrom-Json -AsHashtable
+        if ($cCfg.mcpServers) {
+            foreach ($name in $cCfg.mcpServers.Keys) {
+                if (-not $mcpServers.Contains($name)) {
+                    $src = $cCfg.mcpServers[$name]
+                    $entry = [ordered]@{}
+                    if ($src.Contains('url') -or $src.Contains('serverUrl') -or ($src.Contains('type') -and $src.type -eq 'http')) {
+                        $url = if ($src.Contains('serverUrl')) { $src.serverUrl } else { $src.url }
+                        $entry['type'] = 'http'
+                        $entry['serverUrl'] = $url
+                        $entry['url'] = $url
+                        if ($src.Contains('headers') -and $src.headers) { $entry['headers'] = $src.headers }
+                    } else {
+                        $entry['type'] = 'stdio'
+                        $cmd = "$($src.command)"
+                        $args = if ($src.Contains('args')) { @($src.args) } else { @() }
+                        if ($cmd -in 'npx', 'npm', 'pnpm', 'yarn') {
+                            $args = @('/c', $cmd) + $args
+                            $cmd = 'cmd'
+                        }
+                        $entry['command'] = $cmd
+                        $entry['args'] = $args
+                        $entry['env'] = if ($src.Contains('env') -and $src.env) { $src.env } else { @{} }
+                    }
+                    $mcpServers[$name] = $entry
+                }
+            }
+        }
+    }
+
+    # Ensure Windows cmd /c wrapper for angular-cli or other npx servers
+    foreach ($k in @($mcpServers.Keys)) {
+        $srv = $mcpServers[$k]
+        if ($srv.command -in 'npx', 'npm', 'pnpm', 'yarn') {
+            $srv['args'] = @('/c', $srv.command) + @($srv.args | Where-Object { $null -ne $_ })
+            $srv['command'] = 'cmd'
+        }
+        if ($srv.url -and -not $srv.serverUrl) {
+            $srv['serverUrl'] = $srv.url
+        }
+    }
+
+    if ($mcpServers.Count -gt 0) {
+        $payload = [ordered]@{ mcpServers = $mcpServers }
+        ConvertTo-Json -InputObject $payload -Depth 20 | Set-Content -LiteralPath $geminiMcpConfig -Encoding utf8NoBOM
+        Ok "Antigravity MCP servers: $($mcpServers.Count) configured in ~\.gemini\config\mcp_config.json"
+    }
+
+    # 2. Antigravity config.json (permissions, etc.)
+    $backupConfig = Join-Path $agents 'antigravity-config.json'
+    $geminiConfigFile = Join-Path $geminiConfigDir 'config.json'
+    if (Test-Path $backupConfig) {
+        $bCfg = Get-Content $backupConfig -Raw | ConvertFrom-Json -AsHashtable
+        $curCfg = if (Test-Path $geminiConfigFile) { Get-Content $geminiConfigFile -Raw | ConvertFrom-Json -AsHashtable } else { [ordered]@{} }
+        if (-not $curCfg.Contains('userSettings')) { $curCfg['userSettings'] = [ordered]@{} }
+        if ($bCfg.userSettings -and $bCfg.userSettings.globalPermissionGrants) {
+            $curCfg['userSettings']['globalPermissionGrants'] = $bCfg.userSettings.globalPermissionGrants
+        }
+        ConvertTo-Json -InputObject $curCfg -Depth 10 | Set-Content -LiteralPath $geminiConfigFile -Encoding utf8NoBOM
+        Ok "Antigravity settings: permission grants synced to ~\.gemini\config\config.json"
+    }
+
+    # 3. Skills: Directory junctions into ~\.gemini\config\skills and register skills.json
+    if (Test-Path $store) {
+        $resolvedStore = (Resolve-Path $store).Path.Replace('\', '/')
+        $skillsJsonObj = [ordered]@{ entries = @([ordered]@{ path = $resolvedStore }) }
+        ConvertTo-Json -InputObject $skillsJsonObj -Depth 5 | Set-Content -LiteralPath $geminiSkillsJson -Encoding utf8NoBOM
+
+        $linked = 0; $present = 0
+        foreach ($skill in Get-ChildItem -LiteralPath $store -Directory -ErrorAction Ignore) {
+            $link = Join-Path $geminiSkillsDir $skill.Name
+            if (Test-Path -LiteralPath $link) { $present++; continue }
+            New-Item -ItemType Junction -Path $link -Target $skill.FullName | Out-Null
+            $linked++
+        }
+        Ok "Antigravity skills: $linked linked into ~\.gemini\config\skills, $present already there"
+    }
+}
+
 if ('claude' -notin $Skip) {
     Section 'Claude Code and Claude Desktop'
     Restore-Claude
+    Section 'Google Antigravity'
+    Restore-Antigravity
 }
 
 Write-Host ("`n{0} ok, {1} warnings" -f $counts.ok, $counts.warn)
