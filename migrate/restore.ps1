@@ -24,9 +24,7 @@
     The timestamped folder migrate/backup.sh wrote, copied to this machine.
 
 .PARAMETER CodeRoot
-    Where the projects live on Windows. Default <Dev Drive>:\Code - D:\Code on
-    the laptop, E:\Code on the desktop. The letter is the one install.ps1
-    -DevDrive recorded, or else the only ReFS volume there is.
+    Where the projects live on Windows. Default D:\Code, on the Dev Drive.
 
 .PARAMETER Skip
     Steps to leave out: projects, data, claude. Comma-separated with no spaces,
@@ -44,9 +42,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Backup,
-    # No literal default: the Dev Drive is D: on the laptop and E: on the
-    # desktop, so it is worked out below.
-    [string]$CodeRoot,
+    [string]$CodeRoot = 'D:\Code',
     # NB: deliberately NOT [ValidateSet]. `pwsh -File` - the way every example
     # here runs this script - passes arguments as literal strings and never
     # parses PowerShell syntax, so `-Skip data,claude` arrives as the single
@@ -75,24 +71,9 @@ function Info([string]$Text)    { Write-Host "        $Text" }
 $Backup   = (Resolve-Path -LiteralPath $Backup -ErrorAction Stop).Path
 $manifest = Get-Content (Join-Path $Backup 'manifest.json') -Raw -ErrorAction Stop | ConvertFrom-Json
 
-# The Dev Drive's letter differs per machine. install.ps1 -DevDrive already
-# pointed the package caches at it, so its letter is trusted first - as long as
-# that drive is still ReFS. Otherwise a machine with exactly one ReFS volume
-# has only one candidate. Anything else is a guess, so ask instead.
-if (-not $CodeRoot) {
-    $refs   = @(Get-Volume -ErrorAction Ignore | Where-Object { $_.DriveLetter -and $_.FileSystemType -eq 'ReFS' } |
-        ForEach-Object { "$($_.DriveLetter)".ToUpperInvariant() })
-    $cache  = [Environment]::GetEnvironmentVariable('npm_config_cache', 'User')
-    $letter = if ($cache -and $refs -contains "$($cache[0])".ToUpperInvariant()) { "$($cache[0])".ToUpperInvariant() }
-              elseif ($refs.Count -eq 1) { $refs[0] }
-    if (-not $letter) {
-        throw "Can't tell which drive is the Dev Drive (ReFS volumes: $(if ($refs) { $refs -join ', ' } else { 'none' })). Pass it: -CodeRoot E:\Code"
-    }
-    $CodeRoot = "${letter}:\Code"
-}
 # Before anything is written: a -CodeRoot on a drive this machine doesn't have
-# (D:\Code typed out of habit on the desktop) would otherwise fail once per
-# project, halfway through.
+# (no Dev Drive created yet, or a typo) would otherwise fail once per project,
+# halfway through.
 $CodeRoot = $CodeRoot.TrimEnd('\')
 $drive    = Split-Path -Qualifier $CodeRoot -ErrorAction Ignore
 if (-not $drive -or -not (Test-Path "$drive\")) { throw "-CodeRoot $CodeRoot is not on a drive this machine has. Nothing was changed." }
@@ -101,7 +82,7 @@ if (-not $drive -or -not (Test-Path "$drive\")) { throw "-CodeRoot $CodeRoot is 
 # Claude Code names a project's folder after its path, every character that
 # isn't a letter or digit replaced by '-':
 #   /home/me/Documents/Code/myapp  ->  -home-me-Documents-Code-myapp
-#   E:\Code\myapp                  ->  E--Code-myapp
+#   D:\Code\myapp                  ->  D--Code-myapp
 function Get-ProjectKey([string]$Path) { $Path -replace '[^A-Za-z0-9]', '-' }
 
 # A Linux path under the old code root, as the same path under -CodeRoot. $null

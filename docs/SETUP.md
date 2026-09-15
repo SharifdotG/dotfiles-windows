@@ -113,16 +113,8 @@ Boot it from the one-time boot menu: **F12** on the ThinkPad, **F11** on the MSI
 - **Laptop:** [LAPTOP.md](LAPTOP.md), stages 1–2.
 - **Desktop:** [DESKTOP.md](DESKTOP.md), stages 1–4.
 
-Both end with a Dev Drive of about 75 GB, created before any app is installed. Projects, package
-caches and the PostgreSQL data all go there. **Its letter differs:**
-
-| Machine | Dev Drive | Projects | PostgreSQL data |
-|---|---|---|---|
-| Laptop | `D:` | `D:\Code` | `D:\PostgreSQL\18\Data` |
-| Desktop | `E:` | `E:\Code` | `E:\PostgreSQL\18\Data` |
-
-The commands below show the laptop's `D:`. On the desktop, type `E:` instead. No script assumes a
-letter: `install.ps1 -DevDrive` records it, and `doctor.ps1` and `restore.ps1` read it from there.
+Both end with a `D:` Dev Drive of about 75 GB, created before any app is installed. Projects, package
+caches and the PostgreSQL data all go there.
 
 ## 2. Apps
 
@@ -289,7 +281,7 @@ stopped.
    matter here — which components, and where the data lives — are only offered by this installer.
 2. **Components:** tick *PostgreSQL Server* and *Command Line Tools*. Untick *pgAdmin 4* and *Stack
    Builder*. Queries and browsing go through the VS Code PostgreSQL extension, `ms-ossdata.vscode-pgsql`.
-3. **Data Directory:** `D:\PostgreSQL\18\Data` (desktop: `E:\PostgreSQL\18\Data`), on the Dev Drive. (The installer offers
+3. **Data Directory:** `D:\PostgreSQL\18\Data`, on the Dev Drive. (The installer offers
    `C:\Program Files\PostgreSQL\18\data` — change it. Substitute your major version for `18` here
    and in every command below.)
 4. **Password.** The installer asks for a password for the `postgres` superuser. Write it down: every
@@ -323,7 +315,7 @@ this runbook they are not a script to hand to `pwsh -File`, for two reasons:
   `$env:ProgramFiles` *before* the inner `pwsh` ever sees the string, so the inner shell is handed
   an already-empty variable and fails with ``The term '\psql.exe' is not recognized``.
 
-**First, the port.** Edit `D:\PostgreSQL\18\Data\postgresql.conf` (desktop: `E:\…`), change `port = 5432` to
+**First, the port.** Edit `D:\PostgreSQL\18\Data\postgresql.conf`, change `port = 5432` to
 `port = 5434`, and save. It is writable without elevation. This is the one setting that cannot go
 through `tuning.sql`: `ALTER SYSTEM` needs a connection, and there is no connection until the server
 can bind a port.
@@ -390,8 +382,7 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
 
 ## 3. Apply
 
-1. **Get the repo.** Clone it with `git clone`, for example into `D:\Code\dotfiles-windows` (desktop:
-   `E:\Code\dotfiles-windows`). A zip
+1. **Get the repo.** Clone it with `git clone`, for example into `D:\Code\dotfiles-windows`. A zip
    downloaded through a browser carries Mark-of-the-Web, and PowerShell refuses to run its scripts;
    `Get-ChildItem -Recurse | Unblock-File` fixes that.
 2. **Run the scripts.** Do this after installing Microsoft 365 and PostgreSQL, so the OneDrive
@@ -400,7 +391,7 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
    ```powershell
    pwsh -File .\debloat\windows.ps1       # restore point, then Win11Debloat, silently (keeps Teams)
    pwsh -File .\tune.ps1
-   pwsh -File .\install.ps1 -DevDrive D:  # desktop: -DevDrive E:. May ask for your git name and email - see below
+   pwsh -File .\install.ps1 -DevDrive D:  # may ask for your git name and email - see below
    Restart-Computer
    ```
 
@@ -446,19 +437,14 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
 ## 4. Restore
 
 **Both machines run it, from the same folder** — the one `backup.sh` wrote on the laptop in stage 0.
-On the desktop, copy that `<timestamp>` folder over first (to `G:`, say — not inside `E:\Code`).
+On the desktop, copy that `<timestamp>` folder over first (to `G:`, say — not inside `D:\Code`).
 Every file is checked against `SHA256SUMS`, so a bad copy stops it before anything changes.
 
-Two things to know on the desktop:
-- **The data is as old as the backup.** Volumes and databases come back as they were on CachyOS,
-  not as they are on the laptop today. If the laptop's are newer and you'd rather not have the old
-  ones, add `-Skip data`: the projects then start with empty databases.
-- **Nothing to pass for the Dev Drive.** `-CodeRoot` defaults to `Code` on the drive `install.ps1
-  -DevDrive E:` recorded, so `E:\Code`. It stops before changing anything if it can't tell, or if a
-  `-CodeRoot` you pass is on a drive the machine doesn't have.
+**On the desktop, the data is as old as the backup.** Volumes and databases come back as they were
+on CachyOS, not as they are on the laptop today. If the laptop's are newer and you'd rather not have
+the old ones, add `-Skip data`: the projects then start with empty databases.
 
 Before you start:
-- `install.ps1 -DevDrive` has run (stage 3), so the Dev Drive's letter is known.
 - Docker Desktop is running.
 - `claude` has been started once to sign in.
 - The stage 0 backup folder is reachable: on the external drive, or copied onto the machine.
@@ -499,9 +485,8 @@ pwsh -File .\migrate\restore.ps1 -Backup $backup
 ```
 
 1. **Verify.** Every file is checked against `SHA256SUMS` before anything changes.
-2. **Projects.** Each project in the backup is cloned into `Code` on the Dev Drive (`D:\Code`,
-   `E:\Code` on the desktop), on the branch `backup.sh` recorded, and its local-only files go back
-   in. Files that already exist are left alone. Git Credential Manager prompts here if you skipped
+2. **Projects.** Each project in the backup is cloned into `D:\Code`, on the branch `backup.sh`
+   recorded, and its local-only files go back in. Files that already exist are left alone. Git Credential Manager prompts here if you skipped
    the step above.
 3. **Data.** Their Docker volumes and every Postgres database are restored. It asks once first,
    because this replaces what's in them. Each database server is started on its own and stopped
@@ -512,8 +497,7 @@ pwsh -File .\migrate\restore.ps1 -Backup $backup
    - Skills go into `~\.agents\skills` and are linked into both `~\.claude\skills` and
      `~\.gemini\config\skills`, with `~\.gemini\config\skills.json` registered.
    - You can re-synchronize MCP servers and skills at any time with `scripts\sync-ai-agents.ps1`.
-   - Transcripts and memory move to their `D:\Code` (or `E:\Code`) project names, so `/resume` lists
-     them there.
+   - Transcripts and memory move to their `D:\Code` project names, so `/resume` lists them there.
    - Claude Desktop's Code-tab list is best effort: its format isn't documented. Any session also
      resumes with `claude --resume <id>`.
 

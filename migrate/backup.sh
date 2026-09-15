@@ -140,7 +140,7 @@ ok "$(find "$HOME/.claude/projects" -name '*.jsonl' 2>/dev/null | wc -l) transcr
 
 # ---- 6. manifest and checksums ------------------------------------------------
 say "Manifest and checksums"
-# restore.ps1 maps every path under codeRoot to the same path under <Dev Drive>:\Code.
+# restore.ps1 maps every path under codeRoot to the same path under D:\Code.
 jq -n --arg taken "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg home "$HOME" --arg codeRoot "$CODE_ROOT" \
   '{taken: $taken, home: $home, codeRoot: $codeRoot, projects: $ARGS.positional}' \
   --args "${PROJECTS[@]}" > "$OUT/manifest.json" || warn "could not write manifest.json"

@@ -10,7 +10,6 @@ PostgreSQL, and a browser at the same time.
 | GPU | Intel UHD 620 | Radeon RX 570 8 GB (Polaris) |
 | RAM | 16 GB, **soldered** | 16 GB DDR4-2400 |
 | Storage | 238 GB NVMe | 512 GB NVMe + 1 TB HDD as `G:` |
-| Dev Drive | `D:` | `E:` |
 | On top of the shared setup | Sleep-state and battery tuning | Games, recording and creative apps |
 | Runbook | [docs/LAPTOP.md](docs/LAPTOP.md) | [docs/DESKTOP.md](docs/DESKTOP.md) |
 
@@ -38,7 +37,7 @@ what to back up before wiping Linux.
 ```powershell
 pwsh -File .\debloat\windows.ps1          # admin (self-elevates); makes a restore point first
 pwsh -File .\tune.ps1                     # admin (self-elevates)
-pwsh -File .\install.ps1 -DevDrive D:     # user; E: on the desktop. Add -WhatIf to preview
+pwsh -File .\install.ps1 -DevDrive D:     # user; add -WhatIf to preview
 Restart-Computer
 pwsh -File .\debloat\brave.ps1            # opens SlimBrave Neo: Import the preset, Apply
 pwsh -File .\scripts\doctor.ps1           # verify. Run it once elevated as well
@@ -99,7 +98,7 @@ with a fresh environment.
 | `docs\SETUP.md` | The shared runbook: pre-wipe backup, apps, apply, restore |
 | `docs\LAPTOP.md`, `docs\DESKTOP.md` | Each machine's BIOS, install, drivers, power and measurements. The desktop's also covers the HDD's ext4-to-NTFS move, Memory Integrity and gaming |
 | `migrate/backup.sh` | Bash, run on the laptop's CachyOS before the wipe. Puts the named projects' (`-p`) local-only files, their databases and volumes, MCP servers, skills and Claude sessions into one checksummed folder. Reuses `dotfiles-linux`'s `db-backup.sh` and `agents-backup.sh` |
-| `migrate\restore.ps1` | Run on Windows, on both machines, from that same folder. Verifies it, clones the projects into `Code` on the Dev Drive (`D:\Code` on the laptop, `E:\Code` on the desktop), restores their data, and puts Claude Code back under the Windows paths |
+| `migrate\restore.ps1` | Run on Windows, on both machines, from that same folder. Verifies it, clones the projects into `D:\Code`, restores their data, and puts Claude Code back under the Windows paths |
 
 ## Memory: what replaced each Linux layer
 
