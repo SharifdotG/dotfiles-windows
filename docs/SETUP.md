@@ -416,6 +416,11 @@ The files aren't in this repo, because redistribution isn't stated as allowed.
    - *Settings → General*: turn **off** *Start Docker Desktop when you sign in*, and keep *Use the
      WSL 2 based engine* on.
    - *Resources*: turn on *Resource Saver*.
+   - *Resources → Advanced → Disk image location*: **Browse** to `D:\Docker` and **Apply**. The disk
+     (`docker_data.vhdx`) grows with every image and build and never shrinks, even after a prune:
+     on the laptop it had reached 25.6 GB on `C:`. The Dev Drive's 75 GB has room for it, and `C:`
+     keeps its space for Windows and apps. If Docker is already set up, the same setting moves the existing disk. Don't
+     move the file by hand, or Docker Desktop loses track of it.
    - *Docker Engine* should show this repo's `daemon.json`.
 5. **Startup apps.** Your call, not the repo's — `doctor.ps1` only *lists* what starts at sign-in, it
    no longer has an opinion about any of it. The ones usually worth turning off in

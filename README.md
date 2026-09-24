@@ -106,7 +106,7 @@ with a fresh environment.
 |---|---|---|
 | zram (zstd, 3.8:1 measured) with `vm.swappiness=180` | Memory compression and page combining on; app pre-launch off; pagefile system-managed | `tune.ps1` |
 | `browser.slice` with `MemoryHigh=6G` | Brave policies: background mode off, so Brave exits with its last window. Memory Saver on. Rewards, Wallet, VPN, Leo, News and telemetry off | `debloat\brave.ps1` |
-| `docker.socket`: dockerd costs nothing until something uses it | Docker Desktop doesn't start at sign-in. Its VM is capped at 4 GB, hands page cache back when idle, and its disk shrinks | `config\shared\wsl\.wslconfig`, SETUP stage 3 |
+| `docker.socket`: dockerd costs nothing until something uses it | Docker Desktop doesn't start at sign-in. Its VM is capped at 4 GB and hands page cache back when idle. Its disk only grows, so it lives on the Dev Drive, not `C:` | `config\shared\wsl\.wslconfig`, SETUP stage 3 |
 | The Postgres container only ran with its stack | The native PostgreSQL service is Manual: `pgstart` and `pgstop` in the profile. `tuning.sql` caps its memory. Its data sits on the Dev Drive | `tune.ps1`, `config\shared\postgresql` |
 | earlyoom and systemd-oomd | Nothing on the Windows side, by choice. A runaway container stack hits the VM cap instead of pushing Windows into the pagefile | `config\shared\wsl\.wslconfig` |
 | No autostart for Vesktop and Telegram (~700 MB, the biggest single win) | Teams, WhatsApp, Telegram, the AI desktop apps, Vesktop and Docker Desktop off in Startup apps; on the desktop, the game launchers too. `doctor.ps1` flags any that come back | SETUP stage 3, DESKTOP stage 5, doctor |

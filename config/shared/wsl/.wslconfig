@@ -42,7 +42,10 @@ guiApplications=false
 # conflict with Docker Desktop's Resource Saver.
 autoMemoryReclaim=dropCache
 
-# Virtual disks created from now on shrink when space is freed inside them - on
-# the laptop's 238 GB drive that matters. Put this file in place before Docker Desktop's
-# first start, so its disk is created sparse.
+# Meant to make new virtual disks shrink when space is freed inside them. It
+# doesn't reach Docker Desktop's disks: main\ext4.vhdx was created on 2026-09-22
+# with this file in place and still isn't sparse, and docker_data.vhdx sat at
+# 25.6 GB with 17 GB in use (checked with `fsutil sparse queryflag`, 2026-09-24).
+# Docker's disk grows and never shrinks, so SETUP stage 3 puts it on the Dev
+# Drive instead of C:. Kept for any other WSL disk.
 sparseVhd=true
