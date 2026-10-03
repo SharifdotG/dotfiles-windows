@@ -544,6 +544,32 @@ account (*gear → Backup and Sync Settings*) and it restores settings, keybindi
 snippets and UI state on its own. The one extension worth checking for afterwards is the PostgreSQL
 one this runbook assumes, `ms-ossdata.vscode-pgsql`.
 
+### Moving between the laptop and the desktop
+
+Once both machines run Windows, `migrate\backup.ps1` takes the place of `backup.sh`. It writes the
+same folder layout, so the same `restore.ps1` puts it back. It carries less than `backup.sh` did:
+Claude Code's MCP servers (user and project scope), Claude Desktop's MCP servers, the skills, the
+settings and rules, Antigravity's config, and the **databases** of the named projects. These are
+`pg_dump -Fc`, one per database. It doesn't carry transcripts or code; git carries the code.
+
+On the machine you're copying **from**, with Docker Desktop running:
+
+```powershell
+pwsh -File .\migrate\backup.ps1 -Project structflow,SocialHousingOSS
+```
+
+It writes `~\Backup\windows-migration\<timestamp>\`, which **holds secrets** (`.env`, MCP tokens).
+Copy that folder across. Then on the machine you're copying **to**, with this repo pulled, all
+of that project's containers stopped, and Claude Code and Claude Desktop **quit**:
+
+```powershell
+pwsh -File .\migrate\restore.ps1 -Backup <where you copied it>\<timestamp>
+```
+
+It replaces those databases (it asks first), and it adds MCP servers and skills without touching
+the ones already there. A Claude Desktop extension, such as Blender, is reinstalled from
+*Settings → Extensions*.
+
 ## 5. Measure
 
 Each machine file has its own table: [LAPTOP.md stage 5](LAPTOP.md#5-measure) and

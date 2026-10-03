@@ -98,6 +98,7 @@ with a fresh environment.
 | `docs\SETUP.md` | The shared runbook: pre-wipe backup, apps, apply, restore |
 | `docs\LAPTOP.md`, `docs\DESKTOP.md` | Each machine's BIOS, install, drivers, power and measurements. The desktop's also covers the HDD's ext4-to-NTFS move, Memory Integrity and gaming |
 | `migrate/backup.sh` | Bash, run on the laptop's CachyOS before the wipe. Puts the named projects' (`-p`) local-only files, their databases and volumes, MCP servers, skills and Claude sessions into one checksummed folder. Reuses `dotfiles-linux`'s `db-backup.sh` and `agents-backup.sh` |
+| `migrate\backup.ps1` | The Windows-to-Windows counterpart, for moving between the laptop and the desktop. Puts MCP servers (Claude Code and Claude Desktop), skills, Claude settings and the named projects' (`-Project`) Postgres databases into the same checksummed layout |
 | `migrate\restore.ps1` | Run on Windows, on both machines, from that same folder. Verifies it, clones the projects into `D:\Code`, restores their data, and puts Claude Code back under the Windows paths |
 
 ## Memory: what replaced each Linux layer

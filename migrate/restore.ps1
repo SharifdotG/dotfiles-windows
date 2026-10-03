@@ -1,8 +1,8 @@
 #Requires -Version 7.2
 <#
 .SYNOPSIS
-    Put a migrate/backup.sh folder back on Windows: the projects, their databases,
-    and Claude Code.
+    Put a migrate/backup.sh or migrate\backup.ps1 folder back on Windows: the
+    projects, their databases, and Claude Code.
 
 .DESCRIPTION
     Run it after docs\SETUP.md stage 3: Git, Docker Desktop and Claude Code are
@@ -21,7 +21,8 @@
     step 3, which replaces volumes and databases, so it asks once first.
 
 .PARAMETER Backup
-    The timestamped folder migrate/backup.sh wrote, copied to this machine.
+    The timestamped folder migrate/backup.sh or migrate\backup.ps1 wrote, copied
+    to this machine.
 
 .PARAMETER CodeRoot
     Where the projects live on Windows. Default D:\Code, on the Dev Drive.
@@ -85,12 +86,16 @@ if (-not $drive -or -not (Test-Path "$drive\")) { throw "-CodeRoot $CodeRoot is 
 #   D:\Code\myapp                  ->  D--Code-myapp
 function Get-ProjectKey([string]$Path) { $Path -replace '[^A-Za-z0-9]', '-' }
 
-# A Linux path under the old code root, as the same path under -CodeRoot. $null
-# for anything else (~/dotfiles, scratch folders): those have no Windows home.
-function ConvertFrom-LinuxPath([string]$Path) {
-    $root = $manifest.codeRoot
+# A path under the backed-up machine's code root, as the same path under
+# -CodeRoot. $null for anything else (~/dotfiles, scratch folders): those have no
+# home here. The root is a Linux path in a backup.sh folder and a Windows one in
+# a backup.ps1 folder, so both separators are compared as '/'.
+function ConvertFrom-BackupPath([string]$Path) {
+    if (-not $Path) { return $null }
+    $root = $manifest.codeRoot.Replace('\', '/').TrimEnd('/')
+    $Path = $Path.Replace('\', '/')
     if ($Path -eq $root) { return $CodeRoot }
-    if ($Path -and $Path.StartsWith("$root/")) {
+    if ($Path.StartsWith("$root/", [StringComparison]::OrdinalIgnoreCase)) {
         return Join-Path $CodeRoot $Path.Substring($root.Length + 1).Replace('/', '\')
     }
     $null
@@ -133,7 +138,7 @@ $projects = @(Get-Content (Join-Path $Backup 'projects\projects.tsv') -ErrorActi
 
 # The project a recorded Linux directory belongs to, or $null.
 function Get-ProjectOf([string]$LinuxDir) {
-    $win = ConvertFrom-LinuxPath $LinuxDir
+    $win = ConvertFrom-BackupPath $LinuxDir
     if (-not $win) { return $null }
     $projects | Where-Object { $win -eq $_.Dir -or $win.StartsWith("$($_.Dir)\") } | Select-Object -First 1
 }
@@ -204,7 +209,7 @@ function Restore-Data {
         if (-not $inList) { continue }
         if (-not $line.Trim()) { break }
         $compose, $wd = $line.Trim() -split "`t"
-        if ($wd -and (Get-ProjectOf $wd)) { $composeDirs[$compose] = ConvertFrom-LinuxPath $wd }
+        if ($wd -and (Get-ProjectOf $wd)) { $composeDirs[$compose] = ConvertFrom-BackupPath $wd }
     }
 
     # Non-Postgres volumes are named <compose project>_<volume>.
@@ -226,15 +231,19 @@ function Restore-Data {
         ForEach-Object {
             $f = $_ -split "`t"
             if (Get-ProjectOf $f[9]) {
-                [pscustomobject]@{ Compose = $f[0]; Service = $f[1]; Db = $f[4]; User = $f[5]; File = $f[6]; Dir = ConvertFrom-LinuxPath $f[9] }
+                [pscustomobject]@{ Compose = $f[0]; Service = $f[1]; Db = $f[4]; User = $f[5]; File = $f[6]; Dir = ConvertFrom-BackupPath $f[9] }
             }
         })
     if (-not ($volumes.Count + $databases.Count)) { Ok 'no volumes or databases for these projects in the snapshot'; return }
 
     Info "$($volumes.Count) volume(s): $($volumes.Volume -join ', ')"
     Info "$($databases.Count) database(s): $(($databases | ForEach-Object { "$($_.Compose)/$($_.Db)" }) -join ', ')"
-    if (-not $Yes -and (Read-Host '  Replace these with the backup? Whatever they hold now is lost [y/N]') -notmatch '^[yY]') {
-        Warn 'volumes and databases skipped'; return
+    # Fails closed. Read-Host under -NonInteractive writes an error and returns
+    # nothing, and `@() -notmatch ...` is an empty array - falsy - so the old
+    # one-line check read "no answer" as yes and replaced every database.
+    if (-not $Yes) {
+        $answer = try { Read-Host '  Replace these with the backup? Whatever they hold now is lost [y/N]' -ErrorAction Stop } catch { '' }
+        if ("$answer" -notmatch '^[yY]') { Warn 'volumes and databases skipped (no -Yes, and no "y" answer)'; return }
     }
 
     $volumeDir = Join-Path $snap.FullName 'volumes'
@@ -312,6 +321,16 @@ if ('data' -notin $Skip) {
 }
 
 # ---- 4. Claude ----------------------------------------------------------------
+# The Store build of Claude Desktop virtualises %APPDATA% into its package folder,
+# so that copy is the live one when it exists.
+function Get-ClaudeDesktopHome {
+    @(
+        Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter 'Claude_*' -ErrorAction Ignore |
+            ForEach-Object { Join-Path $_.FullName 'LocalCache\Roaming\Claude' }
+        Join-Path $env:APPDATA 'Claude'
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+
 function Restore-Claude {
     $claudeHome = Join-Path $HOME '.claude'
     $config     = Join-Path $HOME '.claude.json'
@@ -352,6 +371,60 @@ function Restore-Claude {
             Ok "MCP servers added: $($added -join ', ')"
         }
         if ($kept) { Ok "MCP servers already configured, left alone: $($kept -join ', ')" }
+
+        # Project scope: each folder's own servers, under the folder's path on
+        # this machine. Folders that don't exist here are left out.
+        $cfg   = Get-Content $config -Raw | ConvertFrom-Json -AsHashtable
+        $scope = (Get-Content $exported -Raw | ConvertFrom-Json -AsHashtable).projects
+        $added = @()
+        foreach ($path in @($scope.Keys)) {
+            $local = ConvertFrom-BackupPath $path
+            if (-not $local -and $path -match '^[A-Za-z]:') { $local = $path }
+            if (-not $local -or -not (Test-Path -LiteralPath $local)) { continue }
+            $key = $local.Replace('\', '/')   # the form Claude Code writes
+            if (-not $cfg.Contains('projects')) { $cfg['projects'] = [ordered]@{} }
+            if (-not $cfg.projects.Contains($key)) { $cfg.projects[$key] = [ordered]@{} }
+            if (-not $cfg.projects[$key].Contains('mcpServers')) { $cfg.projects[$key]['mcpServers'] = [ordered]@{} }
+            foreach ($name in @($scope[$path].Keys)) {
+                if ($cfg.projects[$key].mcpServers.Contains($name)) { continue }
+                $cfg.projects[$key].mcpServers[$name] = $scope[$path][$name]
+                $added += "$name ($key)"
+            }
+        }
+        if ($added) {
+            Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+            ConvertTo-Json -InputObject $cfg -Depth 100 | Set-Content -Path $config -Encoding utf8NoBOM
+            Ok "project MCP servers added: $($added -join ', ')"
+        }
+    }
+
+    # Claude Desktop's own MCP servers (backup.ps1 only), merged the same way.
+    $desktopMcp = Join-Path $agents 'claude-desktop-mcp.json'
+    if (Test-Path $desktopMcp) {
+        $desktopHome = Get-ClaudeDesktopHome
+        if (-not $desktopHome) {
+            Warn 'Claude Desktop data folder not found - open Claude Desktop once, sign in, quit it, then re-run with -Skip projects,data'
+        } else {
+            $file = Join-Path $desktopHome 'claude_desktop_config.json'
+            $dcfg = if (Test-Path $file) { Get-Content $file -Raw | ConvertFrom-Json -AsHashtable } else { [ordered]@{} }
+            if (-not $dcfg.Contains('mcpServers')) { $dcfg['mcpServers'] = [ordered]@{} }
+            $servers = (Get-Content $desktopMcp -Raw | ConvertFrom-Json -AsHashtable).mcpServers
+            $added = @(foreach ($name in @($servers.Keys)) {
+                if ($dcfg.mcpServers.Contains($name)) { continue }
+                $dcfg.mcpServers[$name] = $servers[$name]
+                $name
+                if ($servers[$name].command -and -not (Test-Path -LiteralPath $servers[$name].command)) {
+                    Info "$name runs $($servers[$name].command), which isn't on this machine yet"
+                }
+            })
+            if ($added) {
+                if (Test-Path $file) { Copy-Item $file "$file.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')" }
+                ConvertTo-Json -InputObject $dcfg -Depth 100 | Set-Content -Path $file -Encoding utf8NoBOM
+                Ok "Claude Desktop MCP servers added: $($added -join ', ')"
+            } else {
+                Ok 'Claude Desktop MCP servers: all already configured'
+            }
+        }
     }
 
     # Skills: one store in ~\.agents\skills, as on Linux, and a directory junction
@@ -428,7 +501,7 @@ function Restore-Claude {
             $new = @(foreach ($line in Get-Content $history) {
                 if (-not $line) { continue }
                 $entry = $line | ConvertFrom-Json -AsHashtable
-                $win = ConvertFrom-LinuxPath $entry.project
+                $win = ConvertFrom-BackupPath $entry.project
                 if ($win) { $entry['project'] = $win }
                 $json = ConvertTo-Json -InputObject $entry -Depth 20 -Compress
                 if ($seen.Add($json)) { $json }
@@ -445,11 +518,7 @@ function Restore-Claude {
     # under -CodeRoot are added. local-agent-mode-sessions stays in the backup only.
     $desktopArchive = Join-Path $Backup 'claude\claude-desktop.tar.gz'
     if (Test-Path $desktopArchive) {
-        $desktopHome = @(
-            Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Packages') -Directory -Filter 'Claude_*' -ErrorAction Ignore |
-                ForEach-Object { Join-Path $_.FullName 'LocalCache\Roaming\Claude' }
-            Join-Path $env:APPDATA 'Claude'
-        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+        $desktopHome = Get-ClaudeDesktopHome
         if (-not $desktopHome) {
             Warn 'Claude Desktop data folder not found - open Claude Desktop once, sign in, quit it, then re-run with -Skip projects,data'
             return
@@ -459,11 +528,11 @@ function Restore-Claude {
         $added = 0; $skipped = 0
         foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.json' -ErrorAction Ignore) {
             $session = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -AsHashtable
-            $cwd = ConvertFrom-LinuxPath $session.cwd
+            $cwd = ConvertFrom-BackupPath $session.cwd
             $dest = Join-Path $desktopHome ('claude-code-sessions' + $file.FullName.Substring($root.Length))
             if (-not $cwd -or -not (Test-Path $cwd) -or (Test-Path -LiteralPath $dest)) { $skipped++; continue }
             $session['cwd'] = $cwd
-            if ($session.originCwd) { $session['originCwd'] = (ConvertFrom-LinuxPath $session.originCwd) ?? $cwd }
+            if ($session.originCwd) { $session['originCwd'] = (ConvertFrom-BackupPath $session.originCwd) ?? $cwd }
             New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
             ConvertTo-Json -InputObject $session -Depth 100 -Compress | Set-Content -LiteralPath $dest -Encoding utf8NoBOM
             $added++
@@ -485,14 +554,18 @@ function Restore-Antigravity {
 
     New-Item -ItemType Directory -Force -Path $geminiConfigDir, $geminiSkillsDir | Out-Null
 
-    # 1. MCP servers: backup's antigravity-mcp_config.json merged with ~\.claude.json
+    # 1. MCP servers: this machine's own, then the backup's antigravity-mcp_config.json,
+    # then ~\.claude.json. The first to name a server wins.
     $backupMcp = Join-Path $agents 'antigravity-mcp_config.json'
     $claudeConfig = Join-Path $HOME '.claude.json'
     $mcpServers = [ordered]@{}
 
-    if (Test-Path $backupMcp) {
-        $parsed = Get-Content $backupMcp -Raw | ConvertFrom-Json -AsHashtable
-        if ($parsed.mcpServers) { $mcpServers = $parsed.mcpServers }
+    foreach ($source in $geminiMcpConfig, $backupMcp) {
+        if (-not (Test-Path $source)) { continue }
+        $parsed = Get-Content $source -Raw | ConvertFrom-Json -AsHashtable
+        foreach ($name in @($parsed.mcpServers.Keys)) {
+            if (-not $mcpServers.Contains($name)) { $mcpServers[$name] = $parsed.mcpServers[$name] }
+        }
     }
 
     if (Test-Path $claudeConfig) {
