@@ -107,7 +107,7 @@ with a fresh environment.
 |---|---|---|
 | zram (zstd, 3.8:1 measured) with `vm.swappiness=180` | Memory compression and page combining on; app pre-launch off; pagefile system-managed | `tune.ps1` |
 | `browser.slice` with `MemoryHigh=6G` | Brave policies: background mode off, so Brave exits with its last window. Memory Saver on. Rewards, Wallet, VPN, Leo, News and telemetry off | `debloat\brave.ps1` |
-| `docker.socket`: dockerd costs nothing until something uses it | Docker Desktop doesn't start at sign-in. Its VM is capped at 4 GB and hands page cache back when idle. Its disk only grows, so it lives on the Dev Drive, not `C:` | `config\shared\wsl\.wslconfig`, SETUP stage 3 |
+| `docker.socket`: dockerd costs nothing until something uses it | Docker Desktop doesn't start at sign-in. Its VM is capped at 5 GB and hands page cache back when idle. Its disk only grows, so it lives on the Dev Drive, not `C:` | `config\shared\wsl\.wslconfig`, SETUP stage 3 |
 | The Postgres container only ran with its stack | The native PostgreSQL service is Manual: `pgstart` and `pgstop` in the profile. `tuning.sql` caps its memory. Its data sits on the Dev Drive | `tune.ps1`, `config\shared\postgresql` |
 | earlyoom and systemd-oomd | Nothing on the Windows side, by choice. A runaway container stack hits the VM cap instead of pushing Windows into the pagefile | `config\shared\wsl\.wslconfig` |
 | No autostart for Vesktop and Telegram (~700 MB, the biggest single win) | Teams, WhatsApp, Telegram, the AI desktop apps, Vesktop and Docker Desktop off in Startup apps; on the desktop, the game launchers too. `doctor.ps1` flags any that come back | SETUP stage 3, DESKTOP stage 5, doctor |
@@ -117,9 +117,9 @@ with a fresh environment.
 | VS Code watcher and search excludes; tsserver capped at 3 GB | Not carried here — VS Code's own Settings Sync does it | VS Code, signed in with GitHub |
 | `fs.inotify.max_user_watches` | Nothing to raise. On Windows the cost of huge file trees is Defender scanning them, so projects, package caches and the PostgreSQL data go on a **Dev Drive**: ReFS, trusted, which puts Defender in performance mode | LAPTOP/DESKTOP stage 2, `install.ps1 -DevDrive` |
 
-**Why the VM cap is 4 GB.** Native builds (Node, Nx, .NET) and PostgreSQL run on Windows; only the
+**Why the VM cap is 5 GB.** Native builds (Node, Nx, .NET) and PostgreSQL run on Windows; only the
 containers live in the VM. Both machines have 16 GB, and the laptop's can't be upgraded, so the cap
-is a quarter of RAM rather than Docker's default of half. It was 3 GB for a while and is back at 4.
+stays well under Docker's default of half of RAM. It has gone 3 → 4 → 5 GB as the stacks grew.
 The cap is a ceiling, not a reservation, but it also bounds the VM's page cache, which isn't handed
 back while a container is running: a 376 MB stack was measured holding 3.3 GB under a 4 GB cap, so
 expect a running stack to sit near the cap. 2 GB is too tight: the VM's own overhead is ~0.4 GB and

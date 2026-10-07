@@ -11,9 +11,9 @@
 # cache, which autoMemoryReclaim doesn't hand back while a container keeps the VM
 # busy: a 376 MB structflow stack was measured holding 3.3 GB, 2.5 GB of it cache.
 #
-# 4GB, raised from 3GB. Native builds (Node, Nx, .NET) run on Windows and
+# 5GB, raised from 4GB. Native builds (Node, Nx, .NET) run on Windows and
 # compete for the same 16 GB - on both machines, and soldered on the laptop - so
-# this stays a quarter of RAM, not Docker's default of half. On the desktop,
+# this stays well under Docker's default of half of RAM. On the desktop,
 # `gameprep` shuts the VM down before a game. A runaway compose stack
 # hits this wall and is OOM-killed inside the VM instead of pushing Windows into
 # the pagefile - the same idea as `capped()` in the Linux zshrc.
@@ -23,7 +23,7 @@
 # (`docker compose up -d postgres keycloak`); if one really needs more, raise
 # this and re-measure with scripts\doctor.ps1 - don't guess. A container that
 # exits with code 137 while the VM is full is the sign it's too low.
-memory=4GB
+memory=5GB
 
 # The VM has no zram, so this swap is a file on disk. Keep it small: it is a
 # cushion for spikes, not a place for a working set to live.
