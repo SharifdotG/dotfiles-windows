@@ -28,6 +28,9 @@ memory=5GB
 # The VM has no zram, so this swap is a file on disk. Keep it small: it is a
 # cushion for spikes, not a place for a working set to live.
 swap=2GB
+# WSL's default puts it in %TEMP% on C:, as a 2 GB swap.vhdx in a GUID folder.
+# Keep it on the Dev Drive next to Docker's disk. Backslashes must be doubled.
+swapFile=D:\\Docker\\swap.vhdx
 
 # WSLg - the Wayland/X11 stack for Linux GUI apps, run in its own system distro.
 # Nothing here needs Linux GUI apps.
